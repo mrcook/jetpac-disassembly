@@ -27,7 +27,7 @@ b$5cf0 defs $03
 ; #TABLE(default,centre,:w)
 ; { =h Bits(n) | =h Option }
 ; { 0 | Players (reset=1, set=2) }
-; { 1 | Input Type (reset=Keyboard, set=Kempston) }
+; { 1 | Input Type (reset=Keyboard, set=Joystick) }
 ; TABLE#
 @label=game_options
 b$5cf3 defb $00
@@ -764,7 +764,7 @@ c$61d5 call $6234    ; Draw the menu entries
 *$61ef bit 2,a       ; Key #3 pressed? ("KEYBOARD")
  $61f1 jr z,$61f5    ; No key pressed? Jump
  $61f3 res 1,d       ; else, Input type = keyboard
-*$61f5 bit 3,a       ; Key #4 pressed? ("KEMPSTON JOYSTICK")
+*$61f5 bit 3,a       ; Key #4 pressed? ("JOYSTICK")
  $61f7 jr z,$61fb    ; No key pressed? Jump
  $61f9 set 1,d       ; else, Input type = joystick
 *$61fb bit 4,a       ; {Key #5 pressed? ("START GAME")
@@ -793,7 +793,7 @@ c$61d5 call $6234    ; Draw the menu entries
  $6229 res 7,(hl)    ;
  $622b inc hl        ;
  $622c ret           ;
-; Set "2 PLAYER GAME" and "KEMPSTON JOYSTICK" menu items flashing.
+; Set "2 PLAYER GAME" and "JOYSTICK" menu items flashing.
 *$622d res 7,(hl)    ;
  $622f inc hl        ;
  $6230 set 7,(hl)    ;
@@ -842,7 +842,7 @@ c$6234 ld de,$6261   ; Point #REGde to main menu colour attributes
 ; { 2 | 1 Player Game }
 ; { 3 | 2 Player Game }
 ; { 4 | Keyboard }
-; { 5 | Kempston Joystick }
+; { 5 | Joystick }
 ; { 6 | Start Game }
 ; TABLE#
 @label=menu_colour_table
@@ -856,7 +856,7 @@ b$6261 defb $47,$47,$47,$47,$47,$47
 ; { 2 | 1 Player Game }
 ; { 3 | 2 Player Game }
 ; { 4 | Keyboard }
-; { 5 | Kempston Joystick }
+; { 5 | Joystick }
 ; { 6 | Start Game }
 ; TABLE#
 @label=menu_position_table
@@ -4017,25 +4017,29 @@ c$72ef ld a,(ix+$01) ; {Actor X position = Jetman X position
  $72fe ld ($5dc2),a  ;
  $7301 ret           ;
 
-; Read input from the Kempston joystick port.
+; Joystick Input (Interface 2)
+;
+; The ROM cartridge was made for the Interface 2 which reads the Joystick I
+; bits in the format of 000LRDUF, which are mapped to the keyboard keys: 6, 7,
+; 8, 9, and 0. Note that a reset bit means the button is pressed.
 ;
 ; Used by the routines at #R$7309, #R$733f, #R$735e and #R$743e.
 ;
 ; Output:A Joystick direction/button state.
-@label=ReadJoystick
-c$7302 ld a,$ef      ;
+@label=ReadInterface2Joystick
+c$7302 ld a,$ef      ; Interface 2 Joystick port
  $7304 out ($fb),a   ;
- $7306 in a,($fe)    ;
+ $7306 in a,($fe)    ; #REGa = bits for 000LRDUF
  $7308 ret           ;
 
 ; Read input from the keyboard port.
 ;
 ; Used by the routines at #R$739e and #R$753c.
 ;
-; Output:A Direction value.
+; Output:A direction values $EF (L), $F7 (R) like joystick: 000LRDUF.
 @label=ReadInputLR
 c$7309 ld a,($5cf3)  ; Game options
- $730c bit 1,a       ; {Read joystick if input type is Kempston
+ $730c bit 1,a       ; {Read Joystick if option set
  $730e jr nz,$7302   ; }
  $7310 ld a,$fe      ; {Start reading the keyboard port (254)
  $7312 out ($fd),a   ;
@@ -4044,9 +4048,9 @@ c$7309 ld a,($5cf3)  ; Game options
  $7318 cp $1e        ; {Read input again if 30
  $731a jr z,$7324    ; }
  $731c and $14       ;
- $731e cp $14        ; {Set direction to left if 20, else, must be right
- $7320 jr z,$7336    ;
- $7322 jr $7339      ; }
+ $731e cp $14        ;
+ $7320 jr z,$7336    ; Set direction to left
+ $7322 jr $7339      ; else, must be right
 ; Reading the input again.
 *$7324 ld a,$7f      ; {Read input port 254...again
  $7326 out ($fd),a   ;
@@ -4055,11 +4059,11 @@ c$7309 ld a,($5cf3)  ; Game options
  $732c cp $1e        ; {No input detect if 30
  $732e jr z,$733c    ; }
  $7330 and $14       ;
- $7332 cp $14        ; {Set direction to right if 20, else input is left
+ $7332 cp $14        ; {Set direction to right, else input is left
  $7334 jr z,$7339    ; }
-*$7336 ld a,$ef      ; #REGa=LEFT_KEY
+*$7336 ld a,$ef      ; #REGa=LEFT_KEY  : 1110 1111
  $7338 ret           ;
-*$7339 ld a,$f7      ; #REGa=RIGHT_KEY
+*$7339 ld a,$f7      ; #REGa=RIGHT_KEY : 1111 0111
  $733b ret           ;
 *$733c ld a,$ff      ; #REGa=NO INPUT DETECTED
  $733e ret           ;
@@ -4068,10 +4072,10 @@ c$7309 ld a,($5cf3)  ; Game options
 ;
 ; Used by the routine at #R$7492.
 ;
-; Output:A Fire button state.
+; Output:A fire button - Pressed = $FE like joystick: 000LRDUF.
 @label=ReadInputFire
 c$733f ld a,($5cf3)  ; Game options
- $7342 bit 1,a       ; {Read joystick if input type is Kempston
+ $7342 bit 1,a       ; {Read Joystick if option set
  $7344 jr nz,$7302   ; }
  $7346 ld b,$02      ; Read keyboard twice
  $7348 ld a,$fd      ;
@@ -4083,19 +4087,19 @@ c$733f ld a,($5cf3)  ; Game options
  $7352 jr nz,$735b   ; Fire button pressed?
  $7354 ld a,$bf      ;
  $7356 djnz $734a    ; Read input again with new #REGa
- $7358 ld a,$ff      ; NO INPUT DETECTED
+ $7358 ld a,$ff      ; No input detected
  $735a ret           ;
-*$735b ld a,$fe      ; #REGa=FIRE
+*$735b ld a,$fe      ; #REGa=FIRE : 1111 1110
  $735d ret           ;
 
-; Check if thrust button is pressed.
+; Check if thrust (up) button is pressed.
 ;
 ; Used by the routines at #R$7412 and #R$753c.
 ;
-; Output:A Thrust button state.
+; Output:A thrust button - Pressed = $FD like joystick: 000LRDUF.
 @label=ReadInputThrust
 c$735e ld a,($5cf3)  ; Game options
- $7361 bit 1,a       ; {Read joystick if input type is Kempston
+ $7361 bit 1,a       ; {Read Joystick if option set
  $7363 jr nz,$7302   ; }
  $7365 ld b,$02      ; Read keyboard twice
  $7367 ld a,$fb      ;
@@ -4107,9 +4111,9 @@ c$735e ld a,($5cf3)  ; Game options
  $7371 jr nz,$737a   ; Thrust button pressed?
  $7373 ld a,$df      ;
  $7375 djnz $7369    ; Read input again with new #REGa
- $7377 ld a,$ff      ; NO INPUT DETECTED
+ $7377 ld a,$ff      ; No input detected
  $7379 ret           ;
-*$737a ld a,$fd      ; #REGa=THRUST
+*$737a ld a,$fd      ; #REGa=THRUST (up) : 1111 1101
  $737c ret           ;
 
 ; Game play starts, or prepare new turn, or check Jetman thrust input.
@@ -4194,41 +4198,42 @@ c$73da ld h,$00       ;
  $73ed jp nz,$74fa    ; }
  $73f0 add hl,de      ; else, increase X position
 
-; Update Jetman position/speed based on thrust input.
+; Apply gravity to Jetman if no thrust button detected.
 ;
 ; Used by the routine at #R$74fa.
 ;
 ; Input:IX Jetman object.
 ;       H New X position.
 ;       L New Thrust value.
-@label=JetmanThrusting
+@label=JetmanApplyGravity
 c$73f1 ld a,l        ;
 @ssub=ld ($5dc0+$07),a ; Update Actor thrust
  $73f2 ld ($5dc7),a  ;
  $73f5 ld (ix+$01),h ; Set new Jetman X position
+; Short circuit thrust button check.
  $73f8 ld a,($5cf3)  ; Game options
- $73fb bit 1,a       ; {Check for joystick thrusters if input type is Kempston
+ $73fb bit 1,a       ; {Read Joystick if option set
  $73fd jp nz,$743e   ; }
- $7400 ld b,$02      ; Check input twice (fire and thrust)
- $7402 ld a,$ef      ; Default #REGa=FIRE, then check for this input
+ $7400 ld b,$02      ; Check input counter
+ $7402 ld a,$ef      ;
 *$7404 out ($fd),a   ; {Read input port 254
  $7406 in a,($fe)    ; }
  $7408 and $1f       ;
- $740a cp $1f        ; {Set vertical speed to zero if not thrusting
+ $740a cp $1f        ; {No thrust so set vertical speed to zero
  $740c jr nz,$7438   ; }
- $740e ld a,$f7      ; #REGa=THRUST, now check input for this
- $7410 djnz $7404    ;
+ $740e ld a,$f7      ; #REGa=THRUST
+ $7410 djnz $7404    ; Check input again
 
 ; Check if Jetman is moving falling downward.
 ;
 ; Used by the routine at #R$743e.
 @label=JetmanFlyCheckFalling
 c$7412 call $735e     ; Check if THRUST button pressed
- $7415 bit 1,a        ; {Move Jetman down if not thrusting
+ $7415 bit 1,a        ; {Set Jetman to down position if not thrusting
  $7417 jp nz,$74d5    ; }
- $741a res 7,(ix+$00) ; Jetman direction is DOWN or WALKing
- $741e bit 7,(ix+$04) ; {Flip vertical direction if moving down
- $7422 jp nz,$74e0    ; }
+ $741a res 7,(ix+$00) ; {Jetman direction is DOWN or WALKing
+ $741e bit 7,(ix+$04) ; }
+ $7422 jp nz,$74e0    ; Flip vertical direction if moving down
 
 ; Increase Jetman vertical speed.
 ;
@@ -4257,7 +4262,7 @@ c$7438 ld (ix+$06),$00 ; Jetman Y speed is zero
 ;
 ; Used by the routine at #R$73f1.
 @label=JetmanFlyCheckThrusting
-c$743e call $7302    ; Read Joystick port
+c$743e call $7302    ; Read Joystick
  $7441 bit 2,a       ; {Set Y speed to zero if not thrusting
  $7443 jp z,$7438    ; }
  $7446 jr $7412      ; else check if falling and update movement

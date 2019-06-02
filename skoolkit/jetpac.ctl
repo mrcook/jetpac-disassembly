@@ -19,7 +19,7 @@ D $5CF0 A 3-byte decimal representation of the score. Maximum value is 999999.
 @ $5CF0 label=hi_score
 S $5CF0,3,$03
 b $5CF3 Game options.
-D $5CF3 #TABLE(default,centre,:w) { =h Bits(n) | =h Option } { 0 | Players (reset=1, set=2) } { 1 | Input Type (reset=Keyboard, set=Kempston) } TABLE#
+D $5CF3 #TABLE(default,centre,:w) { =h Bits(n) | =h Option } { 0 | Players (reset=1, set=2) } { 1 | Input Type (reset=Keyboard, set=Joystick) } TABLE#
 @ $5CF3 label=game_options
   $5CF3,1,1
 b $5CF4 Player one score.
@@ -411,7 +411,7 @@ N $61D8 Read the keyboard and perform menu selection.
   $61EF,2 Key #3 pressed? ("KEYBOARD")
   $61F1,2 No key pressed? Jump
   $61F3,2 else, Input type = keyboard
-  $61F5,2 Key #4 pressed? ("KEMPSTON JOYSTICK")
+  $61F5,2 Key #4 pressed? ("JOYSTICK")
   $61F7,2 No key pressed? Jump
   $61F9,2 else, Input type = joystick
   $61FB,5 Key #5 pressed? ("START GAME")
@@ -430,7 +430,7 @@ N $6204 Update flashing state of the menu items.
   $6221,3 Set flashing state for joystick input
   $6224,2 Loop and process again menu selection
 N $6226 Set flashing state for "1 PLAYER GAME" and "KEYBOARD" menu items.
-N $622D Set "2 PLAYER GAME" and "KEMPSTON JOYSTICK" menu items flashing.
+N $622D Set "2 PLAYER GAME" and "JOYSTICK" menu items flashing.
 c $6234 Display the main menu items to the screen.
 D $6234 Used by the routine at #R$61d5.
 @ $6234 label=MenuDrawEntries
@@ -449,11 +449,11 @@ N $6240 Flip-flop between normal/shadow registers: meaning one time we hit this 
   $625A,3 Point #REGde to the copyright string
   $625D,3 Now display the copyright message
 b $6261 Colour attributes for main menu.
-D $6261 #TABLE(default,centre,:w) { =h Bytes(n) | =h Menu Item } { 1 | Jetpac Game Selection } { 2 | 1 Player Game } { 3 | 2 Player Game } { 4 | Keyboard } { 5 | Kempston Joystick } { 6 | Start Game } TABLE#
+D $6261 #TABLE(default,centre,:w) { =h Bytes(n) | =h Menu Item } { 1 | Jetpac Game Selection } { 2 | 1 Player Game } { 3 | 2 Player Game } { 4 | Keyboard } { 5 | Joystick } { 6 | Start Game } TABLE#
 @ $6261 label=menu_colour_table
   $6261,6,6
 b $6267 Vertical position of each line of text in the main menu.
-D $6267 #TABLE(default,centre,:w) { =h Byte(n) | =h Menu Item } { 1 | Jetpac Game Selection } { 2 | 1 Player Game } { 3 | 2 Player Game } { 4 | Keyboard } { 5 | Kempston Joystick } { 6 | Start Game } TABLE#
+D $6267 #TABLE(default,centre,:w) { =h Byte(n) | =h Menu Item } { 1 | Jetpac Game Selection } { 2 | 1 Player Game } { 3 | 2 Player Game } { 4 | Keyboard } { 5 | Joystick } { 6 | Start Game } TABLE#
 @ $6267 label=menu_position_table
   $6267,6,6
 t $626D Text displayed on the main menu screen
@@ -2354,50 +2354,54 @@ R $72EF Input:IX Jetman object.
   $72EF,6 Actor X position = Jetman X position
 @ $72F8 ssub=ld ($5dc0+$01),a ; Actor Y position = Jetman Y position
 @ $72FE ssub=ld ($5dc0+$02),a ; Actor movement = Jetman direction
-c $7302 Read input from the Kempston joystick port.
-D $7302 Used by the routines at #R$7309, #R$733f, #R$735e and #R$743e.
-R $7302 Output:A Joystick direction/button state.
-@ $7302 label=ReadJoystick
+c $7302 Joystick Input (Interface 2)
+D $7302 The ROM cartridge was made for the Interface 2 which reads the Joystick I bits in the format of 000LRDUF, which are mapped to the keyboard keys: 6, 7, 8, 9, and 0. Note that a reset bit means the button is pressed.
+R $7302 Used by the routines at #R$7309, #R$733f, #R$735e and #R$743e.
+N $7302 Output:A Joystick direction/button state.
+@ $7302 label=ReadInterface2Joystick
+  $7302,2 Interface 2 Joystick port
+  $7306,2 #REGa = bits for 000LRDUF
 c $7309 Read input from the keyboard port.
 D $7309 Used by the routines at #R$739e and #R$753c.
-R $7309 Output:A Direction value.
+R $7309 Output:A direction values $EF (L), $F7 (R) like joystick: 000LRDUF.
 @ $7309 label=ReadInputLR
   $7309,3 Game options
-  $730C,4 Read joystick if input type is Kempston
+  $730C,4 Read Joystick if option set
   $7310,6 Start reading the keyboard port (254)
   $7318,4 Read input again if 30
-  $731E,6 Set direction to left if 20, else, must be right
+  $7320,2 Set direction to left
+  $7322,2 else, must be right
 N $7324 Reading the input again.
   $7324,6 Read input port 254...again
   $732C,4 No input detect if 30
-  $7332,4 Set direction to right if 20, else input is left
-  $7336,2 #REGa=LEFT_KEY
-  $7339,2 #REGa=RIGHT_KEY
+  $7332,4 Set direction to right, else input is left
+  $7336,2 #REGa=LEFT_KEY  : 1110 1111
+  $7339,2 #REGa=RIGHT_KEY : 1111 0111
   $733C,2 #REGa=NO INPUT DETECTED
 c $733F Check if fire button is pressed.
 D $733F Used by the routine at #R$7492.
-R $733F Output:A Fire button state.
+R $733F Output:A fire button - Pressed = $FE like joystick: 000LRDUF.
 @ $733F label=ReadInputFire
   $733F,3 Game options
-  $7342,4 Read joystick if input type is Kempston
+  $7342,4 Read Joystick if option set
   $7346,2 Read keyboard twice
 N $734A Start reading the keyboard port (254).
   $7352,2 Fire button pressed?
   $7356,2 Read input again with new #REGa
-  $7358,2 NO INPUT DETECTED
-  $735B,2 #REGa=FIRE
-c $735E Check if thrust button is pressed.
+  $7358,2 No input detected
+  $735B,2 #REGa=FIRE : 1111 1110
+c $735E Check if thrust (up) button is pressed.
 D $735E Used by the routines at #R$7412 and #R$753c.
-R $735E Output:A Thrust button state.
+R $735E Output:A thrust button - Pressed = $FD like joystick: 000LRDUF.
 @ $735E label=ReadInputThrust
   $735E,3 Game options
-  $7361,4 Read joystick if input type is Kempston
+  $7361,4 Read Joystick if option set
   $7365,2 Read keyboard twice
 N $7369 Start reading the keyboard port (254).
   $7371,2 Thrust button pressed?
   $7375,2 Read input again with new #REGa
-  $7377,2 NO INPUT DETECTED
-  $737A,2 #REGa=THRUST
+  $7377,2 No input detected
+  $737A,2 #REGa=THRUST (up) : 1111 1101
 c $737D Game play starts, or prepare new turn, or check Jetman thrust input.
 @ $737D label=GamePlayStarts
   $737D,7 If begin play delay timer is zero (turn started), check to see if player is thrusting
@@ -2445,28 +2449,29 @@ R $73DA L New Thrust value.
 @ $73E5 ssub=ld a,($5dc0+$07) ; Actor thrust
   $73E9,7 Decrease Jetman X position if moving right
   $73F0,1 else, increase X position
-c $73F1 Update Jetman position/speed based on thrust input.
+c $73F1 Apply gravity to Jetman if no thrust button detected.
 D $73F1 Used by the routine at #R$74fa.
 R $73F1 Input:IX Jetman object.
 R $73F1 H New X position.
 R $73F1 L New Thrust value.
-@ $73F1 label=JetmanThrusting
+@ $73F1 label=JetmanApplyGravity
 @ $73F2 ssub=ld ($5dc0+$07),a ; Update Actor thrust
   $73F5,3 Set new Jetman X position
+N $73F8 Short circuit thrust button check.
   $73F8,3 Game options
-  $73FB,5 Check for joystick thrusters if input type is Kempston
-  $7400,2 Check input twice (fire and thrust)
-  $7402,2 Default #REGa=FIRE, then check for this input
+  $73FB,5 Read Joystick if option set
+  $7400,2 Check input counter
   $7404,4 Read input port 254
-  $740A,4 Set vertical speed to zero if not thrusting
-  $740E,2 #REGa=THRUST, now check input for this
+  $740A,4 No thrust so set vertical speed to zero
+  $740E,2 #REGa=THRUST
+  $7410,2 Check input again
 c $7412 Check if Jetman is moving falling downward.
 D $7412 Used by the routine at #R$743e.
 @ $7412 label=JetmanFlyCheckFalling
   $7412,3 Check if THRUST button pressed
-  $7415,5 Move Jetman down if not thrusting
-  $741A,4 Jetman direction is DOWN or WALKing
-  $741E,7 Flip vertical direction if moving down
+  $7415,5 Set Jetman to down position if not thrusting
+  $741A,8 Jetman direction is DOWN or WALKing
+  $7422,3 Flip vertical direction if moving down
 c $7425 Increase Jetman vertical speed.
 D $7425 Used by the routine at #R$74d5.
 @ $7425 label=JetmanSpeedIncY
@@ -2484,7 +2489,7 @@ D $7438 Used by the routines at #R$73f1 and #R$743e.
 c $743E Check joystick input for FIRE or THRUST.
 D $743E Used by the routine at #R$73f1.
 @ $743E label=JetmanFlyCheckThrusting
-  $743E,3 Read Joystick port
+  $743E,3 Read Joystick
   $7441,5 Set Y speed to zero if not thrusting
   $7446,2 else check if falling and update movement
 c $7448 Set Jetman vertical speed to maximum.

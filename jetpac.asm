@@ -28,7 +28,7 @@ hi_score:
 ; | Bits(n) | Option                                    |
 ; +---------+-------------------------------------------+
 ; | 0       | Players (reset=1, set=2)                  |
-; | 1       | Input Type (reset=Keyboard, set=Kempston) |
+; | 1       | Input Type (reset=Keyboard, set=Joystick) |
 ; +---------+-------------------------------------------+
 game_options:
   defb $00
@@ -788,7 +788,7 @@ MenuScreen_1:
   jr z,MenuScreen_2       ; No key pressed? Jump
   res 1,d                 ; else, Input type = keyboard
 MenuScreen_2:
-  bit 3,a                 ; Key #4 pressed? ("KEMPSTON JOYSTICK")
+  bit 3,a                 ; Key #4 pressed? ("JOYSTICK")
   jr z,MenuScreen_3       ; No key pressed? Jump
   set 1,d                 ; else, Input type = joystick
 MenuScreen_3:
@@ -822,7 +822,7 @@ MenuScreen_8:
   res 7,(hl)
   inc hl
   ret
-; Set "2 PLAYER GAME" and "KEMPSTON JOYSTICK" menu items flashing.
+; Set "2 PLAYER GAME" and "JOYSTICK" menu items flashing.
 MenuScreen_9:
   res 7,(hl)
   inc hl
@@ -873,7 +873,7 @@ MenuDrawEntries_0:
 ; | 2        | 1 Player Game         |
 ; | 3        | 2 Player Game         |
 ; | 4        | Keyboard              |
-; | 5        | Kempston Joystick     |
+; | 5        | Joystick              |
 ; | 6        | Start Game            |
 ; +----------+-----------------------+
 menu_colour_table:
@@ -888,7 +888,7 @@ menu_colour_table:
 ; | 2       | 1 Player Game         |
 ; | 3       | 2 Player Game         |
 ; | 4       | Keyboard              |
-; | 5       | Kempston Joystick     |
+; | 5       | Joystick              |
 ; | 6       | Start Game            |
 ; +---------+-----------------------+
 menu_position_table:
@@ -4179,27 +4179,31 @@ ActorUpdatePosDir:
   ld (actor+$02),a        ; Actor movement = Jetman direction
   ret
 
-; Read input from the Kempston joystick port.
+; Joystick Input (Interface 2)
+;
+; The ROM cartridge was made for the Interface 2 which reads the Joystick I
+; bits in the format of 000LRDUF, which are mapped to the keyboard keys: 6, 7,
+; 8, 9, and 0. Note that a reset bit means the button is pressed.
 ;
 ; Used by the routines at ReadInputLR, ReadInputFire, ReadInputThrust and
 ; JetmanFlyCheckThrusting.
 ;
 ; Output:A Joystick direction/button state.
-ReadJoystick:
-  ld a,$ef
+ReadInterface2Joystick:
+  ld a,$ef                ; Interface 2 Joystick port
   out ($fb),a
-  in a,($fe)
+  in a,($fe)              ; A = bits for 000LRDUF
   ret
 
 ; Read input from the keyboard port.
 ;
 ; Used by the routines at JetmanFlyThrust and JetmanWalk.
 ;
-; Output:A Direction value.
+; Output:A direction values $EF (L), $F7 (R) like joystick: 000LRDUF.
 ReadInputLR:
   ld a,(game_options)     ; Game options
-  bit 1,a                 ; Read joystick if input type is Kempston
-  jr nz,ReadJoystick      ;
+  bit 1,a                      ; Read Joystick if option set
+  jr nz,ReadInterface2Joystick ;
   ld a,$fe                ; Start reading the keyboard port (254)
   out ($fd),a             ;
   in a,($fe)              ;
@@ -4207,9 +4211,9 @@ ReadInputLR:
   cp $1e                  ; Read input again if 30
   jr z,ReadInputLR_0      ;
   and $14
-  cp $14                  ; Set direction to left if 20, else, must be right
-  jr z,ReadInputLR_1      ;
-  jr ReadInputLR_2        ;
+  cp $14
+  jr z,ReadInputLR_1      ; Set direction to left
+  jr ReadInputLR_2        ; else, must be right
 ; Reading the input again.
 ReadInputLR_0:
   ld a,$7f                ; Read input port 254...again
@@ -4219,13 +4223,13 @@ ReadInputLR_0:
   cp $1e                  ; No input detect if 30
   jr z,ReadInputLR_3      ;
   and $14
-  cp $14                  ; Set direction to right if 20, else input is left
+  cp $14                  ; Set direction to right, else input is left
   jr z,ReadInputLR_2      ;
 ReadInputLR_1:
-  ld a,$ef                ; A=LEFT_KEY
+  ld a,$ef                ; A=LEFT_KEY  : 1110 1111
   ret
 ReadInputLR_2:
-  ld a,$f7                ; A=RIGHT_KEY
+  ld a,$f7                ; A=RIGHT_KEY : 1111 0111
   ret
 ReadInputLR_3:
   ld a,$ff                ; A=NO INPUT DETECTED
@@ -4235,11 +4239,11 @@ ReadInputLR_3:
 ;
 ; Used by the routine at JetmanRedraw.
 ;
-; Output:A Fire button state.
+; Output:A fire button - Pressed = $FE like joystick: 000LRDUF.
 ReadInputFire:
   ld a,(game_options)     ; Game options
-  bit 1,a                 ; Read joystick if input type is Kempston
-  jr nz,ReadJoystick      ;
+  bit 1,a                      ; Read Joystick if option set
+  jr nz,ReadInterface2Joystick ;
   ld b,$02                ; Read keyboard twice
   ld a,$fd
 ; Start reading the keyboard port (254).
@@ -4251,21 +4255,21 @@ ReadInputFire_0:
   jr nz,ReadInputFire_1   ; Fire button pressed?
   ld a,$bf
   djnz ReadInputFire_0    ; Read input again with new A
-  ld a,$ff                ; NO INPUT DETECTED
+  ld a,$ff                ; No input detected
   ret
 ReadInputFire_1:
-  ld a,$fe                ; A=FIRE
+  ld a,$fe                ; A=FIRE : 1111 1110
   ret
 
-; Check if thrust button is pressed.
+; Check if thrust (up) button is pressed.
 ;
 ; Used by the routines at JetmanFlyCheckFalling and JetmanWalk.
 ;
-; Output:A Thrust button state.
+; Output:A thrust button - Pressed = $FD like joystick: 000LRDUF.
 ReadInputThrust:
   ld a,(game_options)     ; Game options
-  bit 1,a                 ; Read joystick if input type is Kempston
-  jr nz,ReadJoystick      ;
+  bit 1,a                      ; Read Joystick if option set
+  jr nz,ReadInterface2Joystick ;
   ld b,$02                ; Read keyboard twice
   ld a,$fb
 ; Start reading the keyboard port (254).
@@ -4277,10 +4281,10 @@ ReadInputThrust_0:
   jr nz,ReadInputThrust_1 ; Thrust button pressed?
   ld a,$df
   djnz ReadInputThrust_0  ; Read input again with new A
-  ld a,$ff                ; NO INPUT DETECTED
+  ld a,$ff                ; No input detected
   ret
 ReadInputThrust_1:
-  ld a,$fd                ; A=THRUST
+  ld a,$fd                ; A=THRUST (up) : 1111 1101
   ret
 
 ; Game play starts, or prepare new turn, or check Jetman thrust input.
@@ -4369,41 +4373,42 @@ JetmanFlyHorizontal:
   jp nz,JetmanFlyDecreasePosX ;
   add hl,de               ; else, increase X position
 
-; Update Jetman position/speed based on thrust input.
+; Apply gravity to Jetman if no thrust button detected.
 ;
 ; Used by the routine at JetmanFlyDecreasePosX.
 ;
 ; Input:IX Jetman object.
 ;       H New X position.
 ;       L New Thrust value.
-JetmanThrusting:
+JetmanApplyGravity:
   ld a,l
   ld (actor+$07),a        ; Update Actor thrust
   ld (ix+$01),h           ; Set new Jetman X position
+; Short circuit thrust button check.
   ld a,(game_options)     ; Game options
-  bit 1,a                       ; Check for joystick thrusters if input type is
-  jp nz,JetmanFlyCheckThrusting ; Kempston
-  ld b,$02                ; Check input twice (fire and thrust)
-  ld a,$ef                ; Default A=FIRE, then check for this input
-JetmanThrusting_0:
+  bit 1,a                       ; Read Joystick if option set
+  jp nz,JetmanFlyCheckThrusting ;
+  ld b,$02                ; Check input counter
+  ld a,$ef
+JetmanApplyGravity_0:
   out ($fd),a             ; Read input port 254
   in a,($fe)              ;
   and $1f
-  cp $1f                  ; Set vertical speed to zero if not thrusting
+  cp $1f                  ; No thrust so set vertical speed to zero
   jr nz,L7438             ;
-  ld a,$f7                ; A=THRUST, now check input for this
-  djnz JetmanThrusting_0
+  ld a,$f7                ; A=THRUST
+  djnz JetmanApplyGravity_0 ; Check input again
 
 ; Check if Jetman is moving falling downward.
 ;
 ; Used by the routine at JetmanFlyCheckThrusting.
 JetmanFlyCheckFalling:
   call ReadInputThrust    ; Check if THRUST button pressed
-  bit 1,a                 ; Move Jetman down if not thrusting
+  bit 1,a                 ; Set Jetman to down position if not thrusting
   jp nz,JetmanSetMoveDown ;
   res 7,(ix+$00)          ; Jetman direction is DOWN or WALKing
-  bit 7,(ix+$04)          ; Flip vertical direction if moving down
-  jp nz,JetmanDirFlipY    ;
+  bit 7,(ix+$04)          ;
+  jp nz,JetmanDirFlipY    ; Flip vertical direction if moving down
 
 ; Increase Jetman vertical speed.
 ;
@@ -4425,16 +4430,16 @@ L7433:
 
 ; Set Jetman vertical speed to zero.
 ;
-; Used by the routines at JetmanThrusting and JetmanFlyCheckThrusting.
+; Used by the routines at JetmanApplyGravity and JetmanFlyCheckThrusting.
 L7438:
   ld (ix+$06),$00         ; Jetman Y speed is zero
   jr JetmanFlyVertical    ; Update vertical flying
 
 ; Check joystick input for FIRE or THRUST.
 ;
-; Used by the routine at JetmanThrusting.
+; Used by the routine at JetmanApplyGravity.
 JetmanFlyCheckThrusting:
-  call ReadJoystick       ; Read Joystick port
+  call ReadInterface2Joystick ; Read Joystick
   bit 2,a                 ; Set Y speed to zero if not thrusting
   jp z,L7438              ;
   jr JetmanFlyCheckFalling ; else check if falling and update movement
@@ -4575,7 +4580,7 @@ JetmanFlyDecreasePosX:
   and a                   ; Reset Carry flag
   ex de,hl
   sbc hl,de
-  jp JetmanThrusting      ; Update Jetman speed/dir if thrusting
+  jp JetmanApplyGravity   ; Update Jetman speed/dir if thrusting
 
 ; Jetman THRUST-LEFT input.
 ;
