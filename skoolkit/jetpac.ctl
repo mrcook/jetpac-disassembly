@@ -2363,45 +2363,67 @@ N $7302 Output:A Joystick direction/button state.
   $7306,2 #REGa = bits for 000LRDUF
 c $7309 Read input from the keyboard port.
 D $7309 Used by the routines at #R$739e and #R$753c.
-R $7309 Output:A direction values $EF (L), $F7 (R) like joystick: 000LRDUF.
+R $7309 Output:A direction values $EF (L), $F7 (R) or $FF for no input detected - like joystick: 000LRDUF.
 @ $7309 label=ReadInputLR
   $7309,3 Game options
-  $730C,4 Read Joystick if option set
-  $7310,6 Start reading the keyboard port (254)
-  $7318,4 Read input again if 30
-  $7320,2 Set direction to left
-  $7322,2 else, must be right
-N $7324 Reading the input again.
-  $7324,6 Read input port 254...again
-  $732C,4 No input detect if 30
-  $7332,4 Set direction to right, else input is left
+  $730C,2 Use Joystick?
+  $730E,2 Jump if so
+N $7310 Read bottom-left row of keys.
+  $7310,2 Row: Shift,Z,X,C,V
+  $7312,2 Set port for reading keyboard
+  $7314,2 ...and read that row of keys
+  $7318,2 Check if any keys on the row are pressed
+  $731A,2 Jump if not - read inputs again
+  $731C,2 Reset all bits except X and V keys (RIGHT keys)
+  $731E,2 Check if neither are pressed (reset)
+  $7320,2 If so, a LEFT key was pressed: Z and C
+  $7322,2 else RIGHT key was pressed: X and V
+N $7324 Read bottom-right row of keys.
+  $7324,2 Row: B,N,M.Sym,Sp
+  $7326,2 Set port for reading keyboard
+  $7328,2 ...and read that row of keys
+  $732C,2 Check if any keys on the row are pressed
+  $732E,2 Jump if not - no input detected.
+  $7330,2 Reset all bits except B and M keys (LEFT keys)
+  $7332,2 Check if neither are pressed (reset)
+  $7334,2 If so, a RIGHT key was pressed: N and Sym
   $7336,2 #REGa=LEFT_KEY  : 1110 1111
   $7339,2 #REGa=RIGHT_KEY : 1111 0111
-  $733C,2 #REGa=NO INPUT DETECTED
+  $733C,2 #REGa=No input detected
 c $733F Check if fire button is pressed.
 D $733F Used by the routine at #R$7492.
-R $733F Output:A fire button - Pressed = $FE like joystick: 000LRDUF.
+R $733F Output:A fire button, $FE = pressed, $FF = no input - like joystick: 000LRDUF.
 @ $733F label=ReadInputFire
   $733F,3 Game options
-  $7342,4 Read Joystick if option set
-  $7346,2 Read keyboard twice
-N $734A Start reading the keyboard port (254).
-  $7352,2 Fire button pressed?
-  $7356,2 Read input again with new #REGa
-  $7358,2 No input detected
+  $7342,2 Use Joystick?
+  $7344,2 Jump if so
+  $7346,2 Loop count: read left and right row of keys
+  $7348,2 Row: A,S,D,F,G
+  $734A,2 Set port for reading keyboard
+  $734C,2 ...and read that row of keys
+  $7350,2 Check if any keys on the row are pressed
+  $7352,2 Jump if so - key press detected
+  $7354,2 Row: H,J,K,L,Enter
+  $7356,2 Loop back and read input again
+  $7358,2 Still no input detected
   $735B,2 #REGa=FIRE : 1111 1110
 c $735E Check if thrust (up) button is pressed.
 D $735E Used by the routines at #R$7412 and #R$753c.
-R $735E Output:A thrust button - Pressed = $FD like joystick: 000LRDUF.
+R $735E Output:A thrust button, $FE = pressed, $FF = no input - like joystick: 000LRDUF.
 @ $735E label=ReadInputThrust
   $735E,3 Game options
-  $7361,4 Read Joystick if option set
-  $7365,2 Read keyboard twice
-N $7369 Start reading the keyboard port (254).
-  $7371,2 Thrust button pressed?
-  $7375,2 Read input again with new #REGa
-  $7377,2 No input detected
-  $737A,2 #REGa=THRUST (up) : 1111 1101
+  $7361,2 Use Joystick?
+  $7363,2 Jump if so
+  $7365,2 Loop count: read left and right row of keys
+  $7367,2 Row: Q,W,E,R,T
+  $7369,2 Set port for reading keyboard
+  $736B,2 ...and read that row of keys
+  $736F,2 Check if any keys on the row are pressed
+  $7371,2 Jump if so - key press detected
+  $7373,2 Row: Y,U,I,O,P
+  $7375,2 Loop back and read input again
+  $7377,2 Still no input detected
+  $737A,2 #REGa=UP (thrust) : 1111 1101
 c $737D Game play starts, or prepare new turn, or check Jetman thrust input.
 @ $737D label=GamePlayStarts
   $737D,7 If begin play delay timer is zero (turn started), check to see if player is thrusting
@@ -2457,18 +2479,22 @@ R $73F1 L New Thrust value.
 @ $73F1 label=JetmanApplyGravity
 @ $73F2 ssub=ld ($5dc0+$07),a ; Update Actor thrust
   $73F5,3 Set new Jetman X position
-N $73F8 Short circuit thrust button check.
+N $73F8 Check if thruster is being aplpied
   $73F8,3 Game options
-  $73FB,5 Read Joystick if option set
-  $7400,2 Check input counter
-  $7404,4 Read input port 254
-  $740A,4 No thrust so set vertical speed to zero
-  $740E,2 #REGa=THRUST
-  $7410,2 Check input again
+  $73FB,5 Use Joystick? Jump if so.
+N $7400 Induce a slight pause before reading keys - this is required so that the gravity kicks in. It also acts as an undocumented hover key.
+  $7400,2 Loop count: read left and right row of keys
+  $7402,2 Read top-right row of keys
+  $7404,2 Set port for reading keyboard
+  $7406,2 ...and read that row of keys
+  $740A,2 Check if any keys on the row are pressed
+  $740C,2 Jump if so - hover Jetman
+  $740E,2 Read top-left row of keys
+  $7410,2 ...and repeat
 c $7412 Check if Jetman is moving falling downward.
 D $7412 Used by the routine at #R$743e.
 @ $7412 label=JetmanFlyCheckFalling
-  $7412,3 Check if THRUST button pressed
+  $7412,3 Check if THRUST button pressed (Joystick or Keys)
   $7415,5 Set Jetman to down position if not thrusting
   $741A,8 Jetman direction is DOWN or WALKing
   $7422,3 Flip vertical direction if moving down
