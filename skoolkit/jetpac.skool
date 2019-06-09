@@ -748,13 +748,13 @@ c$61c9 di            ; Disable interrupts
 ; Show menu screen and handle menu selection.
 @label=MenuScreen
 c$61d5 call $6234    ; Draw the menu entries
-; Read the keyboard and perform menu selection.
  $61d8 ld a,($5cf3)  ; {#REGd=Game options
  $61db ld d,a        ; }
- $61dc ld a,$f7      ;
- $61de out ($fd),a   ; Disable NMI?
- $61e0 in a,($fe)    ; Read the keyboard
- $61e2 cpl           ; Invert all bit in #REGa (same as XORing A with $FF)
+; Read the keyboard and perform menu selection.
+ $61dc ld a,$f7      ; Row: 1,2,3,4,5
+ $61de out ($fd),a   ; Set port for reading keyboard
+ $61e0 in a,($fe)    ; ...and read that row of keys
+ $61e2 cpl           ; Flip bits so a `1` means a key is pressed.
  $61e3 bit 0,a       ; Key #1 pressed? ("1 PLAYER GAME")
  $61e5 jr z,$61e9    ; No key pressed? Jump
  $61e7 res 0,d       ; else, Player count = 1
@@ -2111,11 +2111,13 @@ c$6971 ld hl,$5dce   ; {Increment random number
  $6980 and a         ; Clear the Carry flag
  $6981 sbc hl,bc     ; {If object pointed to by #REGix is before #REGbc object,
  $6983 jp c,$631c    ; execute main loop}
-*$6986 ld a,$fe      ;
- $6988 out ($fd),a   ; Does this switch NMI off?
- $698a in a,($fe)    ; Read input port 254
- $698c bit 0,a       ; {What is this waiting for?
- $698e jr z,$6986    ; }
+; Read the keyboard to introduce a slight pause?
+*$6986 ld a,$fe      ; Row: Shift,Z,X,C,V
+ $6988 out ($fd),a   ; Set port for reading keyboard
+ $698a in a,($fe)    ; ...and read that row of keys
+ $698c bit 0,a       ; Check if SHIFT key pressed
+ $698e jr z,$6986    ; Jump if pressed
+; Now increment timer and get new random number for interrupt.
  $6990 ld hl,($5dcc) ; {Increment the game timer
  $6993 inc hl        ;
  $6994 ld ($5dcc),hl ; }

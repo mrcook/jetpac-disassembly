@@ -770,13 +770,13 @@ ResetGame:
 ; Show menu screen and handle menu selection.
 MenuScreen:
   call MenuDrawEntries    ; Draw the menu entries
-; Read the keyboard and perform menu selection.
   ld a,(game_options)     ; D=Game options
   ld d,a                  ;
-  ld a,$f7
-  out ($fd),a             ; Disable NMI?
-  in a,($fe)              ; Read the keyboard
-  cpl                     ; Invert all bit in A (same as XORing A with $FF)
+; Read the keyboard and perform menu selection.
+  ld a,$f7                ; Row: 1,2,3,4,5
+  out ($fd),a             ; Set port for reading keyboard
+  in a,($fe)              ; ...and read that row of keys
+  cpl                     ; Flip bits so a `1` means a key is pressed.
   bit 0,a                 ; Key #1 pressed? ("1 PLAYER GAME")
   jr z,MenuScreen_0       ; No key pressed? Jump
   res 0,d                 ; else, Player count = 1
@@ -2167,12 +2167,14 @@ ItemNew:
   and a                   ; Clear the Carry flag
   sbc hl,bc               ; If object pointed to by IX is before BC object,
   jp c,MainLoop           ; execute main loop
+; Read the keyboard to introduce a slight pause?
 ItemNew_0:
-  ld a,$fe
-  out ($fd),a             ; Does this switch NMI off?
-  in a,($fe)              ; Read input port 254
-  bit 0,a                 ; What is this waiting for?
-  jr z,ItemNew_0          ;
+  ld a,$fe                ; Row: Shift,Z,X,C,V
+  out ($fd),a             ; Set port for reading keyboard
+  in a,($fe)              ; ...and read that row of keys
+  bit 0,a                 ; Check if SHIFT key pressed
+  jr z,ItemNew_0          ; Jump if pressed
+; Now increment timer and get new random number for interrupt.
   ld hl,(game_timer)      ; Increment the game timer
   inc hl                  ;
   ld (game_timer),hl      ;

@@ -397,11 +397,12 @@ D $61C9 Used by the routine at #R$60b7.
 c $61D5 Show menu screen and handle menu selection.
 @ $61D5 label=MenuScreen
   $61D5,3 Draw the menu entries
-N $61D8 Read the keyboard and perform menu selection.
   $61D8,4 #REGd=Game options
-  $61DE,2 Disable NMI?
-  $61E0,2 Read the keyboard
-  $61E2,1 Invert all bit in #REGa (same as XORing A with $FF)
+N $61DC Read the keyboard and perform menu selection.
+  $61DC,2 Row: 1,2,3,4,5
+  $61DE,2 Set port for reading keyboard
+  $61E0,2 ...and read that row of keys
+  $61E2,1 Flip bits so a `1` means a key is pressed.
   $61E3,2 Key #1 pressed? ("1 PLAYER GAME")
   $61E5,2 No key pressed? Jump
   $61E7,2 else, Player count = 1
@@ -1233,9 +1234,13 @@ N $697D The self-modifying code routines change the address here to be either th
   $697D,3 #REGbc=inactive player or rocket object
   $6980,1 Clear the Carry flag
   $6981,5 If object pointed to by #REGix is before #REGbc object, execute main loop
-  $6988,2 Does this switch NMI off?
-  $698A,2 Read input port 254
-  $698C,4 What is this waiting for?
+N $6986 Read the keyboard to introduce a slight pause?
+  $6986,2 Row: Shift,Z,X,C,V
+  $6988,2 Set port for reading keyboard
+  $698A,2 ...and read that row of keys
+  $698C,2 Check if SHIFT key pressed
+  $698E,2 Jump if pressed
+N $6990 Now increment timer and get new random number for interrupt.
   $6990,7 Increment the game timer
   $6997,2 #REGh=0 to make sure #REGhl remains <= $00FF
   $6999,2 Get random number
