@@ -1020,8 +1020,8 @@ main_jump_table:
   defw RocketUpdate       ; Rocket Update
   defw RocketTakeoff      ; Rocket Take off
   defw RocketLanding      ; Rocket Landing
-  defw SfxExplosionAlien  ; SFX Explosion: Alien
-  defw SfxExplosionPlayer ; SFX Explosion: Player
+  defw SfxEnemyDeath      ; SFX Death: Enemy
+  defw SfxJetmanDeath     ; SFX Death: Player
   defw ItemCheckCollect   ; Check Item Collected
   defw UFOUpdate          ; UFO Update
   defw LaserBeamAnimate   ; Animate Laser Beam
@@ -1165,7 +1165,7 @@ JetFighterUpdate_6:
   jr nz,JetFighterUpdate_7 ;
   call AlienCollision     ; Alien collision - returns DE
   dec e
-  jr z,KillAlienType1     ; Kill alien type #1
+  jr z,AlienCollisionAnimSfx ; Alien killed by collision
   ld a,(ix+$00)           ; Update Alien "direction"
   and $c0                 ;
   or $07                  ;
@@ -1175,17 +1175,20 @@ JetFighterUpdate_6:
 JetFighterUpdate_7:
   ld bc,$0055             ; 55 points for a dead jet fighter (decimal value)
   call AddPointsToScore   ; Add points to score
-  call SfxThrusters       ; Thruster SFX (actually for exploding jet fighters)
+  call SfxThrusters       ; Exploding jet fighter SFX - actually Thruster SFX!
   jp AnimationStateReset  ; Update current alien state
 
-; Kill Alien: Type #1.
+; Alien SFX when killed by collision.
+;
+; Reset anim state and set SFX params #2.
 ;
 ; Used by the routines at JetFighterUpdate, SquidgyAlienUpdate, UFOUpdate,
-; SphereAlienUpdate, CrossedShipUpdate and MeteorUpdate.
-KillAlienType1:
+;      SphereAlienUpdate, CrossedShipUpdate and
+; #R$6d9c.
+AlienCollisionAnimSfx:
   call AnimationStateReset ; Update actor state
-  ld a,$01                ; Play explosion sound with SFX type #2
-  call SfxExplosion       ;
+  ld a,$01                 ; Play explosion sound with SFX type #2
+  call SfxSetExplodeParams ;
   jp ExplosionAfterKill   ; Animate explosion
 
 ; Jetman collects a collectible item.
@@ -1208,7 +1211,7 @@ ItemCheckCollect_0:
   ld (ix+$00),$00         ; Set type as unused
   ld bc,$0250             ; 250 points to add to score (decimal value)
   call AddPointsToScore   ; Add points to score
-  jp SfxItemCollect       ; SFX for item collect (and return)
+  jp SfxPickupItem        ; SFX for item collect (and return)
 
 ; Drop a new collectible item.
 ;
@@ -1364,7 +1367,7 @@ CollectRocketItem:
   call ActorFindDestroy   ; Find and destroy the sprite (returns DE)
   ld bc,$0100             ; 100 points to add to score (decimal value)
   call AddPointsToScore   ; Add points to score
-  call SfxFuelCollect     ; SFX for collecting fuel
+  call SfxPickupFuel      ; SFX for collecting fuel
   ld hl,(jetman_pos_x)    ; Update module position so it becomes attached to
   ld (ix+$01),l           ; the player via the Jetman Y,X positions
   ld (ix+$02),h           ;
@@ -1782,7 +1785,7 @@ SfxRocketBuild:
 ; SFX for collecting a fuel cell.
 ;
 ; Used by the routine at CollectRocketItem.
-SfxFuelCollect:
+SfxPickupFuel:
   ld d,$50                ; Pitch
   ld c,$28                ; Duration
   jr PlaySquareWav2       ; Play square wave sound
@@ -1790,7 +1793,7 @@ SfxFuelCollect:
 ; SFX for collecting an item, and when Jetman appears on-screen.
 ;
 ; Used by the routines at ItemCheckCollect and GamePlayStarts.
-SfxItemCollect:
+SfxPickupItem:
   ld d,$30                ; Pitch
   ld c,$40                ; Duration
 
@@ -1804,7 +1807,7 @@ PlaySquareWave1:
 
 ; Play square wave sound, starting with silence.
 ;
-; Used by the routines at SfxThrusters, SfxRocketBuild and SfxFuelCollect.
+; Used by the routines at SfxThrusters, SfxRocketBuild and SfxPickupFuel.
 ;
 ; Input:D Sound frequency
 ;       C Sound duration
@@ -1841,13 +1844,16 @@ SfxLaserFire_2:
   jr nz,SfxLaserFire_0    ; Repeat until pitch is $38
   ret
 
-; Set SFX params for explosion sound.
+; Set the default explosion SFX params.
 ;
-; Used by the routines at KillAlienType1, KillAlienType2, KillAlienType3 and
-; MeteorUpdate.
+; The audio is triggered from the TimerUpdate routine using the
+; explosion_sfx_params data.
 ;
-; Input:A Is the alien (0) or the player (1).
-SfxExplosion:
+; Used by the routines at AlienCollisionAnimSfx, AlienKillAnimSfx1,
+;      AlienKillAnimSfx2 and MeteorUpdate.
+;
+; Input:A selects SFX #1 or #2.
+SfxSetExplodeParams:
   ld c,a
   sla c                   ; C=0 or 2
   ld b,$00
@@ -1875,43 +1881,45 @@ SfxExplosion:
 explosion_sfx_defaults:
   defb $0c,$04,$0d,$04
 
-; SFX for player explosion.
+; Play Jetman death SFX.
 ;
 ; Input:IX The explosion SFX params array.
-SfxExplosionPlayer:
-  dec (ix+$01)            ; Decrement the SFX length
-  jr z,SfxFinishReturn    ; Stop playing SFX if length is zero
-  ld c,$10                ; else, set frequency
+SfxJetmanDeath:
+  dec (ix+$01)            ; Decrement the SFX duration
+  jr z,SfxFinishReturn    ; Stop playing SFX if duration is zero
+  ld c,$10                ; Frequency = 16
   jr SfxPlayExplosion     ; Play explosion SFX
 
-; SFX for alien explosion.
+; Play enemy death SFX.
 ;
 ; Input:IX The explosion SFX params array.
-SfxExplosionAlien:
-  dec (ix+$01)            ; Decrement the SFX length
-  jr z,SfxFinishReturn    ; Stop playing SFX if length is zero
-  ld a,(ix+$01)           ; Get SFX length
-  add a,$18               ; Add 24
-  ld c,a                  ; Set as frequency
+SfxEnemyDeath:
+  dec (ix+$01)            ; Decrement the SFX duration
+  jr z,SfxFinishReturn    ; Stop playing SFX if duration is zero
+  ld a,(ix+$01)
+  add a,$18
+  ld c,a                  ; Frequency = Duration + 24
 
 ; Plays the explosion sound effect.
 ;
-; Used by the routine at SfxExplosionPlayer.
+; The note pitch goes from `low` to `high`.
 ;
-; Input:C Amplitude frequency.
+; Used by the routine at SfxJetmanDeath.
+;
+; Input:C note frequency.
 SfxPlayExplosion:
-  ld a,$10                ; Play sound for desire duration
-  out ($fe),a             ;
-  ld b,c                  ;
+  ld a,$10
+  out ($fe),a             ; Turn speaker ON
+  ld b,c                  ; Set duration
 SfxPlayExplosion_0:
-  djnz SfxPlayExplosion_0 ;
+  djnz SfxPlayExplosion_0 ; Note continues for the frequency duration
   xor a
   out ($fe),a             ; Turn speaker OFF
   ld b,c
 SfxPlayExplosion_1:
-  djnz SfxPlayExplosion_1 ; Silence for the duration
-  dec c                   ; Decrement note duration
-  jr nz,SfxPlayExplosion  ; Repeat until duration is zero
+  djnz SfxPlayExplosion_1 ; Silence for the frequency duration
+  dec c                   ; Decrement frequency (higher pitch)
+  jr nz,SfxPlayExplosion  ; Repeat until frequency is zero
   ret
 
 ; Sound has finished playing.
@@ -1923,7 +1931,7 @@ SfxFinishReturn:
 
 ; Animate explosion after killing an alien.
 ;
-; Used by the routine at KillAlienType1.
+; Used by the routine at AlienCollisionAnimSfx.
 ExplosionAfterKill:
   push ix
   ld ix,jetman_exploding_anim_state ; Jetman explosion animation object
@@ -1945,8 +1953,8 @@ ExplosionAfterKill:
 
 ; Enable animation, state false.
 ;
-; Used by the routines at JetFighterUpdate, KillAlienType1, KillAlienType2,
-; KillAlienType3, MeteorUpdate and JetmanWalk.
+; Used by the routines at JetFighterUpdate, AlienCollisionAnimSfx,
+; AlienKillAnimSfx1, AlienKillAnimSfx2, MeteorUpdate and JetmanWalk.
 ;
 ; Input:IX Animation object.
 AnimationStateReset:
@@ -2282,7 +2290,7 @@ SquidgyAlienUpdate:
   jp z,SquidgyAlienUpdate_8 ; Add the points for a kill if alien is dead
   call AlienCollision     ; Alien collision check (returns E)
   dec e
-  jp z,KillAlienType1     ; Kill alien (type #1) if E is zero
+  jp z,AlienCollisionAnimSfx ; Alien killed by collision if E is zero
   xor a
   ld (alien_new_dir_flag),a ; Reset alien new direction flag
 ; Check which direction alien is travelling after hitting a platform.
@@ -2352,7 +2360,7 @@ SquidgyAlienUpdate_7:
 SquidgyAlienUpdate_8:
   ld bc,$0080             ; 80 points (decimal value)
   call AddPointsToScore   ; Add points to score
-  jp KillAlienType2       ; Kill alien (type #2)
+  jp AlienKillAnimSfx1    ; Kill Alien SFX #1
 
 ; Update UFO alien -- this alien is a chaser!
 ;
@@ -2369,7 +2377,7 @@ UFOUpdate:
   jp z,UFOKillAddPoints   ; Add the points for a kill if alien is dead
   call AlienCollision     ; Alien collision check (returns E)
   dec e
-  jp z,KillAlienType1     ; Kill alien (type #1) if E is zero
+  jp z,AlienCollisionAnimSfx ; Alien killed by collision if E is zero
   xor a
   ld (alien_new_dir_flag),a ; Reset alien new direction flag
 ; Check which direction alien is travelling after hitting a platform.
@@ -2546,14 +2554,16 @@ UFOKillAddPoints:
   ld bc,$0050             ; 50 points (decimal value)
   call AddPointsToScore   ; Add points to score
 
-; Kill alien update (type #2).
+; Alien Killed SFX #1 - no score added.
+
+; When alien was killed by laser fire, reset anim state, set explosion SFX
+; params. Used by the routine at SquidgyAlienUpdate.
 ;
-; Resets alien state, and plays explosion SFX #1. Used by the routine at
-; SquidgyAlienUpdate.
-KillAlienType2:
+; Used by the routine at SquidgyAlienUpdate.
+AlienKillAnimSfx1:
   call AnimationStateReset ; Update actor state
   xor a                   ; A should be 0 for the Alien SFX
-  jp SfxExplosion         ; Plays explosion SFX for an Alien
+  jp SfxSetExplodeParams  ; Plays explosion SFX for an Alien
 
 ; Update Sphere alien.
 ;
@@ -2567,10 +2577,10 @@ SphereAlienUpdate:
   call LaserBeamFire      ; Fire laser beam (returns C)
   dec c
   ld bc,$0040             ; 40 points (decimal value)
-  jp z,KillAlienType3     ; Kill alien (type #3) if alien is dead
+  jp z,AlienKillAnimSfx2  ; Kill Alien SFX #2 if alien is dead
   call AlienCollision     ; Alien collision check (returns E)
   dec e
-  jp z,KillAlienType1     ; Kill alien (type #1) if E is zero
+  jp z,AlienCollisionAnimSfx ; Alien killed by collision if E is zero
 ; Check which direction alien is travelling after hitting a platform.
 SphereAlienUpdate_0:
   call JetmanPlatformCollision ; Platform collision (returns E)
@@ -2688,7 +2698,7 @@ CrossedShipUpdate:
   jp z,CrossedShipKillPoints ; Add points and kill alien (type #3) if dead
   call AlienCollision     ; Alien collision (returns E)
   dec e
-  jp z,KillAlienType1     ; Kill alien (type #1) if alien is dead
+  jp z,AlienCollisionAnimSfx ; Alien killed by collision
   xor a
   ld (alien_new_dir_flag),a ; Reset alien new direction
 ; Crossed ship direction change on platform collision.
@@ -2773,15 +2783,15 @@ DrawAlien:
 CrossedShipKillPoints:
   ld bc,$0060             ; 60 points (decimal value)
 
-; Kill alien update (type #3).
+; Alien Killed SFX #2.
 ;
-; Add score, reset alien state, and play explosion SFX #2. Used by the routine
-; at SphereAlienUpdate.
-KillAlienType3:
+; When alien was killed by laser fire, reset anim state, set explosion SFX
+; params, and add score. Used by the routine at SphereAlienUpdate.
+AlienKillAnimSfx2:
   call AddPointsToScore   ; Add points to score
   call AnimationStateReset ; Update actor state
   ld a,$01                ; Set SFX to type #2
-  jp SfxExplosion         ; Play explosion sound with SFX type #2
+  jp SfxSetExplodeParams  ; Play explosion sound with SFX type #2
 
 ; Change alien direction flag to up, and other updates.
 ;
@@ -2848,8 +2858,8 @@ MeteorUpdate_0:
   and a                   ;
   jr nz,MeteorUpdate_1    ;
   call AlienCollision     ; Alien collision check (returns E)
-  dec e                   ; Kill alien (type #1) if E is zero. Player gets no
-  jp z,KillAlienType1     ; points!
+  dec e                      ; Alien killed by collision if E is zero. Player
+  jp z,AlienCollisionAnimSfx ; gets no points!
   ret
 ; Add score for Meteor kill.
 MeteorUpdate_1:
@@ -2859,7 +2869,7 @@ MeteorUpdate_1:
 MeteorUpdate_2:
   call AnimationStateReset ; Update actor state
   xor a                   ; A should be 0 for the Alien SFX
-  jp SfxExplosion         ; Plays explosion SFX for an Alien
+  jp SfxSetExplodeParams  ; Plays explosion SFX for an Alien
 ; Subtract 2 from horizontal direction.
 MeteorUpdate_3:
   sub (ix+$05)            ; Subtract X speed
@@ -3535,8 +3545,8 @@ P2GetLifeCount:
 ; Add points to the active player's score.
 ;
 ; Used by the routines at JetFighterUpdate, ItemCheckCollect,
-; CollectRocketItem, SquidgyAlienUpdate, UFOKillAddPoints, KillAlienType3 and
-; MeteorUpdate.
+; CollectRocketItem, SquidgyAlienUpdate, UFOKillAddPoints, AlienKillAnimSfx2
+; and MeteorUpdate.
 ;
 ; Input:C The number of points (in decimal) to be added to the score.
 AddPointsToScore:
@@ -4189,7 +4199,7 @@ ActorUpdatePosDir:
 ; 8, 9, and 0. Note that a reset bit means the button is pressed.
 ;
 ; Used by the routines at ReadInputLR, ReadInputFire, ReadInputThrust and
-; JetmanFlyCheckThrusting.
+;      JetmanFlyCheckThrusting.
 ;
 ; Output:A Joystick direction/button state.
 ReadInterface2Joystick:
@@ -4300,7 +4310,7 @@ GamePlayStarts:
   jr z,JetmanFlyThrust           ;
   dec (hl)                ; else decrement timer
   jp nz,ScoreLabelFlash   ; Flash Score label if still not zero
-  call SfxItemCollect     ; SFX to indicate play is about to start!
+  call SfxPickupItem      ; SFX to indicate play is about to start!
   ld a,(current_player_number) ; Stop flashing 2UP if current player number is
   and a                        ; 2
   jr nz,GamePlayStarts_1       ;

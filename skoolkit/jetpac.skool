@@ -987,8 +987,8 @@ w$633d defw $68e4    ; Game Delay Loop
  $634f defw $66d0    ; Rocket Update
  $6351 defw $6690    ; Rocket Take off
  $6353 defw $66b4    ; Rocket Landing
- $6355 defw $681d    ; SFX Explosion: Alien
- $6357 defw $6814    ; SFX Explosion: Player
+ $6355 defw $681d    ; SFX Death: Enemy
+ $6357 defw $6814    ; SFX Death: Player
  $6359 defw $6461    ; Check Item Collected
  $635b defw $6ab8    ; UFO Update
  $635d defw $6fc5    ; Animate Laser Beam
@@ -1123,7 +1123,7 @@ c$63a3 ld hl,$5dcb     ; {Increment current alien number
  $6437 jr nz,$644a     ; }
  $6439 call $6de9      ; Alien collision - returns #REGde
  $643c dec e           ;
- $643d jr z,$6456      ; Kill alien type #1
+ $643d jr z,$6456      ; Alien killed by collision
  $643f ld a,(ix+$00)   ; {Update Alien "direction"
  $6442 and $c0         ;
  $6444 or $07          ;
@@ -1132,14 +1132,16 @@ c$63a3 ld hl,$5dcb     ; {Increment current alien number
 ; Jet Fighter is dead. Added score and make exploding sound.
 *$644a ld bc,$0055     ; 55 points for a dead jet fighter (decimal value)
  $644d call $70c2      ; Add points to score
- $6450 call $67b6      ; Thruster SFX (actually for exploding jet fighters)
+ $6450 call $67b6      ; Exploding jet fighter SFX - actually Thruster SFX!
  $6453 jp $685d        ; Update current alien state
 
-; Kill Alien: Type #1.
+; Alien SFX when killed by collision.
+;
+; Reset anim state and set SFX params #2.
 ;
 ; Used by the routines at #R$63a3, #R$6a35, #R$6ab8, #R$6bf8, #R$6cbe and
 ; #R$6d9c.
-@label=KillAlienType1
+@label=AlienCollisionAnimSfx
 c$6456 call $685d    ; Update actor state
  $6459 ld a,$01      ; {Play explosion sound with SFX type #2
  $645b call $67fd    ; }
@@ -1730,7 +1732,7 @@ c$67c6 ld d,$20      ; Pitch
 ; SFX for collecting a fuel cell.
 ;
 ; Used by the routine at #R$6523.
-@label=SfxFuelCollect
+@label=SfxPickupFuel
 c$67cc ld d,$50      ; Pitch
  $67ce ld c,$28      ; Duration
  $67d0 jr $67db      ; Play square wave sound
@@ -1738,7 +1740,7 @@ c$67cc ld d,$50      ; Pitch
 ; SFX for collecting an item, and when Jetman appears on-screen.
 ;
 ; Used by the routines at #R$6461 and #R$737d.
-@label=SfxItemCollect
+@label=SfxPickupItem
 c$67d2 ld d,$30      ; Pitch
  $67d4 ld c,$40      ; Duration
 
@@ -1785,12 +1787,15 @@ c$67e7 ld c,$08      ; Pitch/duration
  $67fa jr nz,$67e9   ; Repeat until pitch is $38
  $67fc ret           ;
 
-; Set SFX params for explosion sound.
+; Set the default explosion SFX params.
+;
+; The audio is triggered from the TimerUpdate routine using the
+; explosion_sfx_params data.
 ;
 ; Used by the routines at #R$6456, #R$6bf1, #R$6d5c and #R$6d9c.
 ;
-; Input:A Is the alien (0) or the player (1).
-@label=SfxExplosion
+; Input:A selects SFX #1 or #2.
+@label=SfxSetExplodeParams
 c$67fd ld c,a        ;
  $67fe sla c         ; #REGc=0 or 2
  $6800 ld b,$00      ;
@@ -1819,41 +1824,43 @@ c$67fd ld c,a        ;
 @label=explosion_sfx_defaults
 b$6810 defb $0c,$04,$0d,$04
 
-; SFX for player explosion.
+; Play Jetman death SFX.
 ;
 ; Input:IX The explosion SFX params array.
-@label=SfxExplosionPlayer
-c$6814 dec (ix+$01)  ; Decrement the SFX length
- $6817 jr z,$6839    ; Stop playing SFX if length is zero
- $6819 ld c,$10      ; else, set frequency
+@label=SfxJetmanDeath
+c$6814 dec (ix+$01)  ; Decrement the SFX duration
+ $6817 jr z,$6839    ; Stop playing SFX if duration is zero
+ $6819 ld c,$10      ; Frequency = 16
  $681b jr $6828      ; Play explosion SFX
 
-; SFX for alien explosion.
+; Play enemy death SFX.
 ;
 ; Input:IX The explosion SFX params array.
-@label=SfxExplosionAlien
-c$681d dec (ix+$01)  ; Decrement the SFX length
- $6820 jr z,$6839    ; Stop playing SFX if length is zero
- $6822 ld a,(ix+$01) ; Get SFX length
- $6825 add a,$18     ; Add 24
- $6827 ld c,a        ; Set as frequency
+@label=SfxEnemyDeath
+c$681d dec (ix+$01)  ; Decrement the SFX duration
+ $6820 jr z,$6839    ; Stop playing SFX if duration is zero
+ $6822 ld a,(ix+$01) ;
+ $6825 add a,$18     ;
+ $6827 ld c,a        ; Frequency = Duration + 24
 
 ; Plays the explosion sound effect.
 ;
+; The note pitch goes from `low` to `high`.
+;
 ; Used by the routine at #R$6814.
 ;
-; Input:C Amplitude frequency.
+; Input:C note frequency.
 @label=SfxPlayExplosion
-c$6828 ld a,$10      ; {Play sound for desire duration
- $682a out ($fe),a   ;
- $682c ld b,c        ;
-*$682d djnz $682d    ; }
+c$6828 ld a,$10      ;
+ $682a out ($fe),a   ; Turn speaker ON
+ $682c ld b,c        ; Set duration
+*$682d djnz $682d    ; Note continues for the frequency duration
  $682f xor a         ;
  $6830 out ($fe),a   ; Turn speaker OFF
  $6832 ld b,c        ;
-*$6833 djnz $6833    ; Silence for the duration
- $6835 dec c         ; Decrement note duration
- $6836 jr nz,$6828   ; Repeat until duration is zero
+*$6833 djnz $6833    ; Silence for the frequency duration
+ $6835 dec c         ; Decrement frequency (higher pitch)
+ $6836 jr nz,$6828   ; Repeat until frequency is zero
  $6838 ret           ;
 
 ; Sound has finished playing.
@@ -2219,7 +2226,7 @@ c$6a35 ld hl,$5dcb    ; {Increment current alien number
  $6a40 jp z,$6aaf     ; Add the points for a kill if alien is dead
  $6a43 call $6de9     ; Alien collision check (returns #REGe)
  $6a46 dec e          ;
- $6a47 jp z,$6456     ; Kill alien (type #1) if #REGe is zero
+ $6a47 jp z,$6456     ; Alien killed by collision if #REGe is zero
  $6a4a xor a          ;
  $6a4b ld ($5dc9),a   ; Reset alien new direction flag
 ; Check which direction alien is travelling after hitting a platform.
@@ -2278,7 +2285,7 @@ c$6a35 ld hl,$5dcb    ; {Increment current alien number
 ; Add score to player if alien is dead.
 *$6aaf ld bc,$0080    ; 80 points (decimal value)
  $6ab2 call $70c2     ; Add points to score
- $6ab5 jp $6bf1       ; Kill alien (type #2)
+ $6ab5 jp $6bf1       ; Kill Alien SFX #1
 
 ; Update UFO alien -- this alien is a chaser!
 ;
@@ -2295,7 +2302,7 @@ c$6ab8 ld hl,$5dcb    ; {Increment current alien number
  $6ac3 jp z,$6beb     ; Add the points for a kill if alien is dead
  $6ac6 call $6de9     ; Alien collision check (returns #REGe)
  $6ac9 dec e          ;
- $6aca jp z,$6456     ; Kill alien (type #1) if #REGe is zero
+ $6aca jp z,$6456     ; Alien killed by collision if #REGe is zero
  $6acd xor a          ;
  $6ace ld ($5dc9),a   ; Reset alien new direction flag
 ; Check which direction alien is travelling after hitting a platform.
@@ -2454,11 +2461,13 @@ c$6ab8 ld hl,$5dcb    ; {Increment current alien number
 c$6beb ld bc,$0050   ; 50 points (decimal value)
  $6bee call $70c2    ; Add points to score
 
-; Kill alien update (type #2).
+; Alien Killed SFX #1 - no score added.
+
+; When alien was killed by laser fire, reset anim state, set explosion SFX
+; params. Used by the routine at #R$6a35.
 ;
-; Resets alien state, and plays explosion SFX #1. Used by the routine at
-; #R$6a35.
-@label=KillAlienType2
+; Used by the routine at #R$6a35.
+@label=AlienKillAnimSfx1
 c$6bf1 call $685d    ; Update actor state
  $6bf4 xor a         ; #REGa should be 0 for the Alien SFX
  $6bf5 jp $67fd      ; Plays explosion SFX for an Alien
@@ -2475,10 +2484,10 @@ c$6bf8 ld hl,$5dcb    ; {Increment current alien number
  $6c03 call $6e1b     ; Fire laser beam (returns #REGc)
  $6c06 dec c          ;
  $6c07 ld bc,$0040    ; 40 points (decimal value)
- $6c0a jp z,$6d5c     ; Kill alien (type #3) if alien is dead
+ $6c0a jp z,$6d5c     ; Kill Alien SFX #2 if alien is dead
  $6c0d call $6de9     ; Alien collision check (returns #REGe)
  $6c10 dec e          ;
- $6c11 jp z,$6456     ; Kill alien (type #1) if #REGe is zero
+ $6c11 jp z,$6456     ; Alien killed by collision if #REGe is zero
 ; Check which direction alien is travelling after hitting a platform.
 *$6c14 call $75e8     ; Platform collision (returns #REGe)
  $6c17 bit 2,e        ; {Update alien Y position if bit-2 is reset
@@ -2585,7 +2594,7 @@ c$6cbe call $6cb0      ; Update actor direction
  $6cc9 jp z,$6d59      ; Add points and kill alien (type #3) if dead
  $6ccc call $6de9      ; Alien collision (returns #REGe)
  $6ccf dec e           ;
- $6cd0 jp z,$6456      ; Kill alien (type #1) if alien is dead
+ $6cd0 jp z,$6456      ; Alien killed by collision
  $6cd3 xor a           ;
  $6cd4 ld ($5dc9),a    ; Reset alien new direction
 ; Crossed ship direction change on platform collision.
@@ -2665,11 +2674,11 @@ c$6d43 ld a,(ix+$00) ; {Backup alien direction
 @label=CrossedShipKillPoints
 c$6d59 ld bc,$0060   ; 60 points (decimal value)
 
-; Kill alien update (type #3).
+; Alien Killed SFX #2.
 ;
-; Add score, reset alien state, and play explosion SFX #2. Used by the routine
-; at #R$6bf8.
-@label=KillAlienType3
+; When alien was killed by laser fire, reset anim state, set explosion SFX
+; params, and add score. Used by the routine at #R$6bf8.
+@label=AlienKillAnimSfx2
 c$6d5c call $70c2    ; Add points to score
  $6d5f call $685d    ; Update actor state
  $6d62 ld a,$01      ; Set SFX to type #2
@@ -2735,8 +2744,8 @@ c$6d9c call $72ef     ; Update Actor position direction
  $6dcc and a          ;
  $6dcd jr nz,$6dd7    ; }
  $6dcf call $6de9     ; Alien collision check (returns #REGe)
- $6dd2 dec e          ; {Kill alien (type #1) if #REGe is zero. Player gets no
- $6dd3 jp z,$6456     ; points!}
+ $6dd2 dec e          ; {Alien killed by collision if #REGe is zero. Player
+ $6dd3 jp z,$6456     ; gets no points!}
  $6dd6 ret            ;
 ; Add score for Meteor kill.
 *$6dd7 ld bc,$0025    ; 25 points (decimal value)
