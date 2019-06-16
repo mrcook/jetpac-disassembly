@@ -365,10 +365,10 @@ rocket_mod_attached:
 last_frame:
   defb $00
 
-; Interrupt state
+; Has a frame ticked over.
 ;
-; $00=enabled, $01=disabled.
-interrupt_state:
+; $00=no, $01=yes.
+frame_ticked:
   defb $00
 
 ; Current menu item colour attribute.
@@ -761,7 +761,7 @@ StartGame_0:
 ;
 ; Used by the routine at PlayerTurnEnds.
 ResetGame:
-  di                      ; Disable interrupts
+  di                      ; Interrupts are disabled for the core engine code
   ld sp,stack_memory+$25  ; Set the stack pointer
   call ResetScreen        ; Reset the screen
   ld a,$04
@@ -958,57 +958,65 @@ NewGame:
   ld bc,L6000             ; To BC address-1 (779 bytes) with a $00 value (C)
   call ClearMemoryBlock
   call ResetPlayerData    ; Reset the player data
-  call RestoreModifiedCode ; Reset the self-modifying code
+  call ResetModifiedCode  ; Reset the self-modifying code
   call LevelNew           ; Initialise a new level
 
-; Reset stack pointer and enable interrupts.
+; Reset stack pointer and enable interrupts before running main loop.
 ;
-; Used by the routine at ItemNew.
-ResetStack:
+; If new item/alien was generated, this routine is called instead of MainLoop.
+;
+; Used by the routine at NewActor.
+MainLoopResetStack:
   ld sp,stack_memory+$25  ; Set the stack pointer
   ei
   ld ix,rocket_state      ; IX=Rocket object
   xor a
   ld (current_alien_number),a ; Reset current alien number
 
-; Main loop.
+; The main game loop.
 ;
-; Used by the routines at CodeModifier and ItemNew.
+; This routine is called until a new item/alien is generated, then
+; MainLoopResetStack is called.
+;
+; Used by the routines at MainLoopResetStack, FrameUpdate and NewActor.
 MainLoop:
   ld a,(SYSVAR_FRAMES)    ; Compare SYSVAR_FRAMES and last_frame
   ld c,a                  ;
   ld a,(last_frame)       ;
   cp c                    ;
-  call nz,CodeModifier    ; Call self-modifying code routine if they don't
-                          ; match
-  ld hl,ItemNew           ; HL points to generate new item routine
-  push hl                 ; Used as return address in several routines
+; Note: if we have EI here, then FrameUpdate will be called and DI executed.
+  call nz,FrameUpdate     ; If they're not equal, do frame update
+; When one of the `main_jump_table` update routines RETurns, the new game actor
+; routine will be called.
+  ld hl,NewActor          ; HL=generate new actor routine
+  push hl                 ; ...and push `ret` address to the stack.
+; Execute one of the update routines using the value in IX.
   ld hl,main_jump_table   ; HL=main jump table
-  ld a,(ix+$00)           ; A=Rocket "movement" field, used to calculate jump
-  rlca                    ; table offset?
-  and $7e                 ; Make sure it can only be a power of 2
+  ld a,(ix+$00)           ; Calculate the jump table offset
+  rlca                    ;
+  and $7e                 ;
 
-; Performs a jump.
+; Performs a main loop update jump.
 ;
-; Used by the routine at ItemDropNew.
+; Used by the routines at MainLoop and ItemDropNew.
 ;
 ; Input:A Offset for jump table address.
 ;       HL Address to the jump table.
 PerformJump:
-  ld c,a                  ; A should be max of 34 (size of jump table)
-  ld b,$00
-  add hl,bc               ; Add offset to base address
-  ld a,(hl)               ; HL=jump address
+  ld c,a
+  ld b,$00                ; BC=offset: 34 max (size of jump table)
+  add hl,bc               ; Set HL to jump table address using offset
+  ld a,(hl)               ; Assign the jump address back to HL
   inc hl                  ;
   ld h,(hl)               ;
   ld l,a                  ;
-  jp (hl)                 ; Execute the jump!
+  jp (hl)                 ; Use `jp` so `ret` calls the new actor/timer routine
 
 ; Main game loop jump table.
 ;
-; Holds addresses for all the main routines that need updating per game loop.
+; Addresses for all the main routines to be updated per game loop.
 main_jump_table:
-  defw GameDelayLoop      ; Game Delay Loop
+  defw FrameRateLimiter   ; Frame rate limiter
   defw GamePlayStarts     ; Jetman Fly
   defw JetmanWalk         ; Jetman Walk
   defw MeteorUpdate       ; Meteor Update
@@ -1435,7 +1443,7 @@ PickupRocketItem_1:
 
 ; Release new collectible item.
 ;
-; Used by the routine at ItemNew.
+; Used by the routine at NewActor.
 ItemNewCollectible:
   ld a,(jetman_direction) ; Jetman direction
   and $3f
@@ -1486,7 +1494,7 @@ item_drop_positions_table:
 
 ; Drop a new fuel pod collectible.
 ;
-; Used by the routine at ItemNew.
+; Used by the routine at NewActor.
 ItemNewFuelPod:
   ld a,(jetman_direction) ; Jetman direction
   and $3f
@@ -1846,7 +1854,7 @@ SfxLaserFire_2:
 
 ; Set the default explosion SFX params.
 ;
-; The audio is triggered from the TimerUpdate routine using the
+; The audio is triggered from the NewActor routine using the
 ; explosion_sfx_params data.
 ;
 ; Used by the routines at AlienCollisionAnimSfx, AlienKillAnimSfx1,
@@ -2047,20 +2055,21 @@ explosion_sprite_table:
   defw gfx_explosion_medium ; Medium explosion
   defw gfx_explosion_big  ; Large explosion
 
-; Game delay when interrupts are enabled.
+; Frame rate limiter.
 ;
-; Is this delay long enough so that interrupts will be forcefully disabled on
-; next game loop?
-GameDelayLoop:
-  ld a,(interrupt_state)  ; A=interrupt state
+; Called at the beginning of each game loop. Setting a higher pause value will
+; slow down aliens, and the speed at which fuel/collectibles fall.
+FrameRateLimiter:
+  ld a,(frame_ticked)     ; A=frame ticked?
   and a
-  ret nz                  ; Return if interrupts disabled (value > 0)
-  ld hl,$00c0             ; HL=loop counter, so we loop 192 times
-GameDelayLoop_0:
-  dec hl                  ;
-  ld a,l                  ;
-  or h                    ;
-  jr nz,GameDelayLoop_0   ;
+  ret nz                  ; We have a new frame, so no pause
+; Execute an end-of-frame pause for the correct game speed
+  ld hl,$00c0              ; HL=pause counter (192)
+FrameRateLimiter_0:
+  dec hl                   ;
+  ld a,l                   ;
+  or h                     ;
+  jr nz,FrameRateLimiter_0 ;
   ret
 
 ; Copy the two sprites for an alien to the buffers.
@@ -2115,126 +2124,133 @@ alien_sprite_table:
   defw gfx_frog_alien     ; Level #8: Frog Alien
   defw gfx_frog_alien
 
-; New item: code modification routine.
+; Frame update and disabled item drop.
+;
+; Also does the self-modifying code update.
 ;
 ; Output:IX Address of Jetman object
-CodeModifier:
-  di                      ; Disable interrupts
+FrameUpdate:
+  di                      ; This routine only called if EI, so we must now
+                          ; disable
   ld a,(SYSVAR_FRAMES)    ; Update last_frame to current SYSVAR_FRAMES
   ld (last_frame),a       ;
-  ld a,$01                ; Set interrupt state to disabled
-  ld (interrupt_state),a  ;
+  ld a,$01                ; Frame has ticked over, set to true
+  ld (frame_ticked),a     ;
   push ix
+; Do some the code modifying...
   ld hl,rocket_state      ; HL=points to the rocket object
-  ld (ItemNew+$0d),hl     ; Modify `LD BC, nnnn` - rocket object
+  ld (NewActor+$0d),hl    ; Modify `LD BC, nnnn` - rocket object
   ld a,$c3                ; Value is a `JP` opcode
-  ld (ItemNew+$2b),a      ; Modify instruction to be `JP`
-  ld hl,ResetInterruptAndModifiedCode ; HL=address to be modified
-  ld (ItemNew+$2c),hl     ; Modify `JP nnnn` address
+  ld (NewActor+$2b),a     ; Modify instruction to be `JP`
+  ld hl,ResetModifiedInFrame ; HL=address to be modified
+  ld (NewActor+$2c),hl    ; Modify `JP nnnn` address
+; ...code modifying complete.
   ld ix,jetman_direction  ; IX=Jetman object
   jp MainLoop             ; Execute main loop
 
-; New item: restore modified code to original values.
+; New actor: reset the modified code to original values.
 ;
-; Used by the routines at NewGame and ResetInterruptAndModifiedCode.
-RestoreModifiedCode:
+; Used by the routines at NewGame and ResetModifiedInFrame.
+ResetModifiedCode:
   ld hl,inactive_jetman_state ; HL=inactive Jetman object
-  ld (ItemNew+$0d),hl     ; Reset `LD BC, 5D30` to use HL
+  ld (NewActor+$0d),hl    ; Reset `LD BC, 5D30` to use HL
   ld a,$3a                ; Value is a `LD A (nnnn)` opcode
-  ld (ItemNew+$2b),a      ; Restore modified opcode to `LD A (nnnn)`
+  ld (NewActor+$2b),a     ; Restore modified opcode to `LD A (nnnn)`
                           ; instruction.
   ld hl,$0244
-  ld (ItemNew+$2c),hl     ; Restore to `LD A (nnnn)` address to 0244
+  ld (NewActor+$2c),hl    ; Restore to `LD A (nnnn)` address to 0244
   ret
 
-; Restore modified code and enable interrupts.
+; Reset the modified code within the current frame.
 ;
-; Used by the routine at ItemNew, but only after that routine's code has been
-; modified.
-ResetInterruptAndModifiedCode:
-  call RestoreModifiedCode ; Restore modified code
-  pop ix
-  xor a
-  ld (interrupt_state),a  ; Set interrupt state to enabled
-  ei                      ; Enable Interrupts
-  ret
+; Used by the routine at NewActor, but only after that routine's code has been
+; modified by FrameUpdate.
+ResetModifiedInFrame:
+  call ResetModifiedCode  ; First, reset the self-modifying code
+  pop ix                  ; Who does the push? Is it FrameUpdate ?
+  xor a                   ; frame ticked=false - not a new frame
+  ld (frame_ticked),a     ;
+  ei                      ; Needed to tick over SYSVAR_FRAMES, main loop will
+  ret                     ; disable interrupts with the frame update call
 
-; Generate new alien/fuel/collectible.
+; Generate new game actor: alien, fuel, or collectible item.
+;
+; Depending on the self-modifying code state, this routine either generates a
+; new item/alien, or updates the item drop game timer.
 ;
 ; Input:IX Item object.
-ItemNew:
+NewActor:
   ld hl,random_number     ; Increment random number
   inc (hl)                ;
-  ld de,$0008             ; Set offset to be length of an item object
-  add ix,de               ; Set pointer to next item
-  push ix
-  pop hl
+  ld de,$0008             ; Set offset
+  add ix,de               ; Set IX to next group of bytes
+  push ix                 ; Copy IX to HL
+  pop hl                  ;
 ; The self-modifying code routines change the address here to be either the
 ; inactive player (5d88) or the rocket object (5d30).
   ld bc,inactive_jetman_state ; BC=inactive player or rocket object
   and a                   ; Clear the Carry flag
   sbc hl,bc               ; If object pointed to by IX is before BC object,
-  jp c,MainLoop           ; execute main loop
+  jp c,MainLoop           ; then jump back to the main loop
 ; Read the keyboard to introduce a slight pause?
-ItemNew_0:
+NewActor_0:
   ld a,$fe                ; Row: Shift,Z,X,C,V
   out ($fd),a             ; Set port for reading keyboard
   in a,($fe)              ; ...and read that row of keys
   bit 0,a                 ; Check if SHIFT key pressed
-  jr z,ItemNew_0          ; Jump if pressed
-; Now increment timer and get new random number for interrupt.
+  jr z,NewActor_0         ; Jump if pressed
+; Now increment timer and get new random number.
   ld hl,(game_timer)      ; Increment the game timer
   inc hl                  ;
   ld (game_timer),hl      ;
-  ld h,$00                ; H=0 to make sure HL remains <= $00FF
-  ld a,r                  ; Get random number
+  ld h,$00                ; Make sure HL remains <= $00FF
+  ld a,r                  ; Get a RANDOM number?
   ld c,a
 ; The self-modifying code routine changes this to `JP 6966`. That routine
 ; resets the interrupts, before changing instruction here to `LD A,(0244)` - an
 ; address in the ROM which always returns $C1.
   ld a,(random_number)    ; A=$C1, from 0244, because 5DCE is never used!
-  add a,(hl)              ; A=byte from address between $0000 - $00FF
+  add a,(hl)              ; A=byte from address $0000 - $00FF
   add a,c                 ; Add R to the number
-  ld (random_number),a    ; Update random number value
+  ld (random_number),a    ; Update random number
   ex af,af'                   ; Jump if current alien number < 3
   ld a,(current_alien_number) ;
   cp $03                      ;
-  jr c,ItemNew_1              ;
+  jr c,NewActor_1             ;
   ex af,af'                   ;
   and $1f
-  jr nz,ItemNew_4         ; Jump if one of the first 5 bits of random number
-                          ; are set
-  ld a,(current_alien_number) ; Generate new item if current alien number >= 6
-  cp $06                      ;
-  jr nc,ItemNew_4             ;
-ItemNew_1:
-  ld a,(begin_play_delay_counter) ; Generate new item if begin play delay
+  jr nz,NewActor_4        ; Drop fuel/collectible if RND is < 32
+  ld a,(current_alien_number) ; Drop fuel/collectible if current alien number
+  cp $06                      ; >= 6
+  jr nc,NewActor_4            ;
+NewActor_1:
+  ld a,(begin_play_delay_counter) ; Drop fuel/collectible if begin play delay
   and a                           ; counter > zero
-  jr nz,ItemNew_4                 ;
-  ld a,(jetman_direction) ; Jetman direction
+  jr nz,NewActor_4                ;
+  ld a,(jetman_direction) ; Get jetman direction
   and $3f
   dec a
-  jr z,ItemNew_2          ; If direction is zero, then find unused alien slot
+  jr z,NewActor_2         ; If direction is zero, then find unused alien slot
   dec a
-  jr nz,ItemNew_4         ; Generate new item if direction is still > zero
+  jr nz,NewActor_4        ; Drop fuel/collectible if direction is still > zero
 ; Find first unused alien slot.
-ItemNew_2:
+NewActor_2:
   ld hl,alien_states      ; Alien state objects
   ld b,$06                ; Loop counter (6 aliens)
   ld de,$0008
-ItemNew_3:
+NewActor_3:
   ld a,(hl)               ; Generate new alien if the slot is unused
   and a                   ;
-  jp z,ItemNew_5          ;
+  jp z,NewActor_5         ;
   add hl,de               ; else increment to the next alien object
-  djnz ItemNew_3          ; ...and try again
-; Generate either a new fuel pod or a new collectible item.
-ItemNew_4:
+  djnz NewActor_3         ; ...and try again
+; Drop either a fuel pod or collectible item.
+NewActor_4:
   call ItemNewFuelPod     ; New fuel pod item
   call ItemNewCollectible ; New collectible item
-  jp ResetStack           ; Reset SP, EI and execute main loop
+  jp MainLoopResetStack   ; Run main loop after resetting SP and EI
 ; Generate new alien in the given state slot (HL).
-ItemNew_5:
+NewActor_5:
   push hl                 ; Push current alien to stack (will be copied to IX)
   ex de,hl
   ld hl,default_alien_state ; Copy default alien state to current alien slot
@@ -2246,22 +2262,23 @@ ItemNew_5:
   and $40                 ; A=either 0 or 64
   ld (ix+$04),a           ; Set item "direction"
   ld (ix+$00),a           ; Set item "movement"
-  ld a,e                  ; Restore A to original game timer value (at 69ee)
+  ld a,e                  ; Restore A to original game timer value
   and $7f
   add a,$28
   ld (ix+$02),a           ; Update item Y position
   push ix                 ; Copy current item object address to BC
   pop bc                  ;
-  ld a,c                  ; Calculate a value for the colour attribute
-  rra                     ;
-  rra                     ;
-  rra                     ;
-  and $03                 ;
-  inc a                   ;
-  inc a                   ;
-  ld (ix+$03),a           ; Update colour attribute
+; Calculate and update new colour attribute.
+  ld a,c                  ; Example: if BC = 5D78, C = $78 = 01111000
+  rra                     ; 00111100
+  rra                     ; 00011110
+  rra                     ; 00001111
+  and $03                 ; 00000011 <- result of AND $03
+  inc a                   ; 00000100
+  inc a                   ; 00000101 = $05
+  ld (ix+$03),a           ; Update colour with value: $02, $03, $04, or $05
   and $01
-  ld (ix+$06),a           ; Set jump table offset
+  ld (ix+$06),a           ; Update jump table offset to either 0 or 1
   ld hl,item_level_object_types ; HL=item level object types
   ld a,(player_level)     ; Using the current player level, pull a value from
   and $07                 ; the item level params table
@@ -2271,8 +2288,8 @@ ItemNew_5:
   ld a,(ix+$00)           ;
   and $c0                 ;
   or (hl)                 ;
-  ld (ix+$00),a           ; Set item object type to this value
-  jp ItemNew_4            ; Drop the collectible then execute the main loop
+  ld (ix+$00),a           ; Update item type to this value
+  jp NewActor_4           ; Drop fuel/collectible then execute the main loop
 
 ; New item object types for each level - 8 bytes for 8 levels.
 item_level_object_types:

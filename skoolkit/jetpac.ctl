@@ -167,9 +167,9 @@ D $5DD3 Set to $04 at the start of each new level. When one of the two modules b
 b $5DD4 Holds a copy of the last SYSVAR_FRAMES counter.
 @ $5DD4 label=last_frame
   $5DD4,1,1
-b $5DD5 Interrupt state
-D $5DD5 $00=enabled, $01=disabled.
-@ $5DD5 label=interrupt_state
+b $5DD5 Has a frame ticked over.
+D $5DD5 $00=no, $01=yes.
+@ $5DD5 label=frame_ticked
   $5DD5,1,1
 b $5DD6 Current menu item colour attribute.
 @ $5DD6 label=current_colour_attr
@@ -390,7 +390,7 @@ D $61BF Reset all scores, sets the SP, initialises the screen, and displays the 
 c $61C9 Reset system and show menu screen.
 D $61C9 Used by the routine at #R$60b7.
 @ $61C9 label=ResetGame
-  $61C9,1 Disable interrupts
+  $61C9,1 Interrupts are disabled for the core engine code
 @ $61CA ssub=ld sp,$5ccb+$25 ; Set the stack pointer
   $61CD,3 Reset the screen
   $61D2,3 Reset Speed modifier to its default
@@ -503,36 +503,40 @@ D $62FE Resets all player, alien, and level data, then start a new game. Used by
   $6307,3 Reset the player data
   $630A,3 Reset the self-modifying code
   $630D,3 Initialise a new level
-c $6310 Reset stack pointer and enable interrupts.
-D $6310 Used by the routine at #R$6971.
-@ $6310 label=ResetStack
+c $6310 Reset stack pointer and enable interrupts before running main loop.
+D $6310 If new item/alien was generated, this routine is called instead of MainLoop.
+R $6310 Used by the routine at #R$6971.
+@ $6310 label=MainLoopResetStack
 @ $6310 ssub=ld sp,$5ccb+$25 ; Set the stack pointer
   $6314,4 #REGix=Rocket object
   $6319,3 Reset current alien number
-c $631C Main loop.
-D $631C Used by the routines at #R$692e and #R$6971.
+c $631C The main game loop.
+D $631C This routine is called until a new item/alien is generated, then #R$6310 is called.
+R $631C Used by the routines at #R$6310, #R$692e and #R$6971.
 @ $631C label=MainLoop
   $631C,8 Compare SYSVAR_FRAMES and last_frame
-  $6324,3 Call self-modifying code routine if they don't match
+N $6324 Note: if we have EI here, then #R$692e will be called and DI executed.
+  $6324,3 If they're not equal, do frame update
+N $6327 When one of the `main_jump_table` update routines RETurns, the new game actor routine will be called.
 @ $6327 nowarn
-  $6327,3 #REGhl points to generate new item routine
-  $632A,1 Used as return address in several routines
+  $6327,3 #REGhl=generate new actor routine
+  $632A,1 ...and push `ret` address to the stack.
+N $632B Execute one of the update routines using the value in IX.
   $632B,3 #REGhl=main jump table
-  $632E,4 #REGa=Rocket "movement" field, used to calculate jump table offset?
-  $6332,2 Make sure it can only be a power of 2
-c $6334 Performs a jump.
-D $6334 Used by the routine at #R$648b.
+  $632E,6 Calculate the jump table offset
+c $6334 Performs a main loop update jump.
+D $6334 Used by the routines at #R$631c and #R$648b.
 R $6334 Input:A Offset for jump table address.
 R $6334 HL Address to the jump table.
 @ $6334 label=PerformJump
-  $6334,1 #REGa should be max of 34 (size of jump table)
-  $6337,1 Add offset to base address
-  $6338,4 #REGhl=jump address
-  $633C,1 Execute the jump!
+  $6335,2 #REGbc=offset: 34 max (size of jump table)
+  $6337,1 Set #REGhl to jump table address using offset
+  $6338,4 Assign the jump address back to #REGhl
+  $633C,1 Use `jp` so `ret` calls the new actor/timer routine
 w $633D Main game loop jump table.
-D $633D Holds addresses for all the main routines that need updating per game loop.
+D $633D Addresses for all the main routines to be updated per game loop.
 @ $633D label=main_jump_table
-  $633D,2,2 Game Delay Loop
+  $633D,2,2 Frame rate limiter
   $633F,2,2 Jetman Fly
   $6341,2,2 Jetman Walk
   $6343,2,2 Meteor Update
@@ -1039,7 +1043,7 @@ D $67E7 Used by the routine at #R$6f86.
   $67F6,1 Increment pitch
   $67FA,2 Repeat until pitch is $38
 c $67FD Set the default explosion SFX params.
-D $67FD The audio is triggered from the TimerUpdate routine using the explosion_sfx_params data.
+D $67FD The audio is triggered from the #R$6971 routine using the explosion_sfx_params data.
 R $67FD Used by the routines at #R$6456, #R$6bf1, #R$6d5c and #R$6d9c.
 N $67FD Input:A selects SFX #1 or #2.
 @ $67FD label=SfxSetExplodeParams
@@ -1152,12 +1156,13 @@ D $68D8 Sprite addresses are repeated because on first use they are animated usi
   $68DE,2,2 Small explosion
   $68E0,2,2 Medium explosion
   $68E2,2,2 Large explosion
-c $68E4 Game delay when interrupts are enabled.
-D $68E4 Is this delay long enough so that interrupts will be forcefully disabled on next game loop?
-@ $68E4 label=GameDelayLoop
-  $68E4,3 #REGa=interrupt state
-  $68E8,1 Return if interrupts disabled (value > 0)
-  $68E9,8 #REGhl=loop counter, so we loop 192 times
+c $68E4 Frame rate limiter.
+D $68E4 Called at the beginning of each game loop. Setting a higher pause value will slow down aliens, and the speed at which fuel/collectibles fall.
+@ $68E4 label=FrameRateLimiter
+  $68E4,3 #REGa=frame ticked?
+  $68E8,1 We have a new frame, so no pause
+N $68E9 Execute an end-of-frame pause for the correct game speed
+  $68E9,8 #REGhl=pause counter (192)
 c $68F2 Copy the two sprites for an alien to the buffers.
 D $68F2 Used by the routine at #R$6094.
 @ $68F2 label=AlienBufferInit
@@ -1199,77 +1204,83 @@ R $690E - Frog Alien
   $6928,2,2
   $692A,2,2 Level #8: Frog Alien
   $692C,2,2
-c $692E New item: code modification routine.
-D $692E Output:IX Address of Jetman object
-@ $692E label=CodeModifier
-  $692E,1 Disable interrupts
+c $692E Frame update and disabled item drop.
+D $692E Also does the self-modifying code update.
+R $692E Output:IX Address of Jetman object
+@ $692E label=FrameUpdate
+  $692E,1 This routine only called if EI, so we must now disable
   $692F,6 Update last_frame to current SYSVAR_FRAMES
-  $6935,5 Set interrupt state to disabled
+  $6935,5 Frame has ticked over, set to true
+N $693C Do some the code modifying...
   $693C,3 #REGhl=points to the rocket object
 @ $693F ssub=ld ($6971+$0d),hl ; Modify `LD BC, nnnn` - rocket object
   $6942,2 Value is a `JP` opcode
-@ $6944 ssub=ld ($6971+$2b),a ; Modify instruction to be `JP`
+@ $6944 ssub=ld ($6971+$2b),a  ; Modify instruction to be `JP`
 @ $6947 nowarn
   $6947,3 #REGhl=address to be modified
 @ $694A ssub=ld ($6971+$2c),hl ; Modify `JP nnnn` address
+N $694D ...code modifying complete.
   $694D,4 #REGix=Jetman object
   $6951,3 Execute main loop
-c $6954 New item: restore modified code to original values.
+c $6954 New actor: reset the modified code to original values.
 D $6954 Used by the routines at #R$62fe and #R$6966.
-@ $6954 label=RestoreModifiedCode
+@ $6954 label=ResetModifiedCode
   $6954,3 #REGhl=inactive Jetman object
 @ $6957 ssub=ld ($6971+$0d),hl ; Reset `LD BC, 5D30` to use #REGhl
   $695A,2 Value is a `LD A (nnnn)` opcode
-@ $695C ssub=ld ($6971+$2b),a ; Restore modified opcode to `LD A (nnnn)` instruction.
+@ $695C ssub=ld ($6971+$2b),a  ; Restore modified opcode to `LD A (nnnn)` instruction.
 @ $6962 ssub=ld ($6971+$2c),hl ; Restore to `LD A (nnnn)` address to 0244
-c $6966 Restore modified code and enable interrupts.
-D $6966 Used by the routine at #R$6971, but only after that routine's code has been modified.
-@ $6966 label=ResetInterruptAndModifiedCode
-  $6966,3 Restore modified code
-  $696C,3 Set interrupt state to enabled
-  $696F,1 Enable Interrupts
-c $6971 Generate new alien/fuel/collectible.
-D $6971 Input:IX Item object.
-@ $6971 label=ItemNew
+c $6966 Reset the modified code within the current frame.
+D $6966 Used by the routine at #R$6971, but only after that routine's code has been modified by #R$692e.
+@ $6966 label=ResetModifiedInFrame
+  $6966,3 First, reset the self-modifying code
+  $6969,2 Who does the push? Is it #R$692e ?
+  $696B,4 frame ticked=false - not a new frame
+  $696F,2 Needed to tick over SYSVAR_FRAMES, main loop will disable interrupts with the frame update call
+c $6971 Generate new game actor: alien, fuel, or collectible item.
+D $6971 Depending on the self-modifying code state, this routine either generates a new item/alien, or updates the item drop game timer.
+R $6971 Input:IX Item object.
+@ $6971 label=NewActor
   $6971,4 Increment random number
-  $6975,3 Set offset to be length of an item object
-  $6978,2 Set pointer to next item
+  $6975,3 Set offset
+  $6978,2 Set IX to next group of bytes
+  $697A,3 Copy IX to HL
 N $697D The self-modifying code routines change the address here to be either the inactive player (5d88) or the rocket object (5d30).
   $697D,3 #REGbc=inactive player or rocket object
   $6980,1 Clear the Carry flag
-  $6981,5 If object pointed to by #REGix is before #REGbc object, execute main loop
+  $6981,5 If object pointed to by #REGix is before #REGbc object, then jump back to the main loop
 N $6986 Read the keyboard to introduce a slight pause?
   $6986,2 Row: Shift,Z,X,C,V
   $6988,2 Set port for reading keyboard
   $698A,2 ...and read that row of keys
   $698C,2 Check if SHIFT key pressed
   $698E,2 Jump if pressed
-N $6990 Now increment timer and get new random number for interrupt.
+N $6990 Now increment timer and get new random number.
   $6990,7 Increment the game timer
-  $6997,2 #REGh=0 to make sure #REGhl remains <= $00FF
-  $6999,2 Get random number
+  $6997,2 Make sure #REGhl remains <= $00FF
+  $6999,2 Get a RANDOM number?
 N $699C The self-modifying code routine changes this to `JP 6966`. That routine resets the interrupts, before changing instruction here to `LD A,(0244)` - an address in the ROM which always returns $C1.
   $699C,3 #REGa=$C1, from 0244, because 5DCE is never used!
-  $699F,1 #REGa=byte from address between $0000 - $00FF
+  $699F,1 #REGa=byte from address $0000 - $00FF
   $69A0,1 Add #REGr to the number
-  $69A1,3 Update random number value
+  $69A1,3 Update random number
   $69A4,9 Jump if current alien number < 3
-  $69AF,2 Jump if one of the first 5 bits of random number are set
-  $69B1,7 Generate new item if current alien number >= 6
-  $69B8,6 Generate new item if begin play delay counter > zero
-  $69BE,3 Jetman direction
+  $69AF,2 Drop fuel/collectible if RND is < 32
+  $69B1,7 Drop fuel/collectible if current alien number >= 6
+  $69B8,6 Drop fuel/collectible if begin play delay counter > zero
+  $69BE,3 Get jetman direction
   $69C4,2 If direction is zero, then find unused alien slot
-  $69C7,2 Generate new item if direction is still > zero
+  $69C7,2 Drop fuel/collectible if direction is still > zero
 N $69C9 Find first unused alien slot.
   $69C9,3 Alien state objects
   $69CC,2 Loop counter (6 aliens)
   $69D1,5 Generate new alien if the slot is unused
   $69D6,1 else increment to the next alien object
   $69D7,2 ...and try again
-N $69D9 Generate either a new fuel pod or a new collectible item.
+N $69D9 Drop either a fuel pod or collectible item.
   $69D9,3 New fuel pod item
   $69DC,3 New collectible item
-  $69DF,3 Reset SP, EI and execute main loop
+  $69DF,3 Run main loop after resetting SP and EI
 N $69E2 Generate new alien in the given state slot (#REGhl).
   $69E2,1 Push current alien to stack (will be copied to #REGix)
   $69E4,8 Copy default alien state to current alien slot
@@ -1279,16 +1290,23 @@ N $69E2 Generate new alien in the given state slot (#REGhl).
   $69F2,2 #REGa=either 0 or 64
   $69F4,3 Set item "direction"
   $69F7,3 Set item "movement"
-  $69FA,1 Restore #REGa to original game timer value (at 69ee)
+  $69FA,1 Restore #REGa to original game timer value
   $69FF,3 Update item Y position
   $6A02,3 Copy current item object address to #REGbc
-  $6A05,8 Calculate a value for the colour attribute
-  $6A0D,3 Update colour attribute
-  $6A12,3 Set jump table offset
+N $6A05 Calculate and update new colour attribute.
+  $6A05,1 Example: if BC = 5D78, C = $78 = 01111000
+  $6A06,1 00111100
+  $6A07,1 00011110
+  $6A08,1 00001111
+  $6A09,2 00000011 <- result of AND $03
+  $6A0B,1 00000100
+  $6A0C,1 00000101 = $05
+  $6A0D,3 Update colour with value: $02, $03, $04, or $05
+  $6A12,3 Update jump table offset to either 0 or 1
   $6A15,3 #REGhl=item level object types
   $6A18,15 Using the current player level, pull a value from the item level params table
-  $6A27,3 Set item object type to this value
-  $6A2A,3 Drop the collectible then execute the main loop
+  $6A27,3 Update item type to this value
+  $6A2A,3 Drop fuel/collectible then execute the main loop
 b $6A2D New item object types for each level - 8 bytes for 8 levels.
 @ $6A2D label=item_level_object_types
   $6A2D,8,8
