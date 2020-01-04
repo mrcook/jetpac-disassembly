@@ -254,8 +254,9 @@ b$5d80 defb $00,$00,$00,$00,$00,$00,$00,$00
 @label=inactive_jetman_state
 b$5d88 defb $00,$00,$00,$00,$00,$00,$00,$00
 
+@defs=$5D90:$08,$00
 ; Unused padding.
-b$5d90 defs $08
+s$5d90 defs $08
 
 ; Rocket/collectible object backup for the inactive player.
 @label=inactive_rocket_state
@@ -263,11 +264,13 @@ b$5d98 defb $00,$00,$00,$00,$00,$00,$00,$00 ; Rocket object
  $5da0 defb $00,$00,$00,$00,$00,$00,$00,$00 ; Rocket module (fuel/part)
  $5da8 defb $00,$00,$00,$00,$00,$00,$00,$00 ; Collectible/Rocket middle
 
+@defs=$5DB0:$06,$00
 ; Unused padding.
-b$5db0 defs $08
+s$5db0 defs $08
 
+@defs=$5DB8:$06,$00
 ; Unused padding.
-b$5db8 defs $08
+s$5db8 defs $08
 
 ; Temporary actor state.
 ;
@@ -380,6 +383,7 @@ b$5dd6 defb $00
 @label=begin_play_delay_counter
 b$5dd7 defb $00
 
+@defs=$5DD8:$06,$00
 ; Unused padding.
 s$5dd8 defs $18
 
@@ -393,8 +397,9 @@ b$5df0 defb $00
 @label=player_lives
 b$5df1 defb $00
 
+@defs=$5DF2:$08,$00
 ; Unused padding for player level/lives object (8 bytes total).
-b$5df2 defb $00,$00,$00,$00,$00,$00
+s$5df2 defs $06
 
 ; Game level for inactive player.
 ;
@@ -406,11 +411,14 @@ b$5df8 defb $00
 @label=inactive_player_lives
 b$5df9 defb $00
 
+@defs=$5DFA:$08,$00
 ; Unused padding for inactive player level/lives object (8 bytes total).
-b$5dfa defb $00,$00,$00,$00,$00,$00
+s$5dfa defs $06
 
 ; Buffers for Alien sprites.
 ;
+; 4 buffers representing left/right facing aliens, with 2 animation frames
+; each.
 ; #TABLE(default,centre,:w)
 ; { =h Bytes(n) | =h Meaning }
 ; { $00     | Header byte - always NULL? }
@@ -418,17 +426,18 @@ b$5dfa defb $00,$00,$00,$00,$00,$00
 ; { $02     | Height value }
 ; { $03-$33 | Pixel data }
 ; TABLE#
-@label=buffer_alien_r1
-b$5e00 defs $33
-@label=buffer_alien_r2
- $5e33 defs $33
-@label=buffer_alien_l1
- $5e66 defs $33
-@label=buffer_alien_l2
- $5e99 defs $33
+@label=buffers_aliens_R1
+b$5e00 defs $33      ; right facing, anim frame 1
+@label=buffers_aliens_R2
+ $5e33 defs $33      ; right facing, anim frame 2
+@label=buffers_aliens_L1
+ $5e66 defs $33      ; left facing, anim frame 1
+@label=buffers_aliens_L2
+ $5e99 defs $33      ; left facing, anim frame 2
 
 ; Buffers for Collectible/Rocket sprites.
 ;
+; Buffer to hold 4 item sprites.
 ; #TABLE(default,centre,:w)
 ; { =h Bytes(n) | =h Meaning }
 ; { $00     | Header byte }
@@ -436,17 +445,18 @@ b$5e00 defs $33
 ; { $02     | Height value }
 ; { $03-$33 | Pixel data }
 ; TABLE#
-@label=buffer_item_r1
-b$5ecc defs $33
-@label=buffer_item_r2
- $5eff defs $33
-@label=buffer_item_l1
- $5f32 defs $33
-@label=buffer_item_l2
- $5f65 defs $33
+@label=buffers_item_1
+b$5ecc defs $33      ; sprite 1
+@label=buffers_item_2
+ $5eff defs $33      ; sprite 2
+@label=buffers_item_3
+ $5f32 defs $33      ; sprite 3
+@label=buffers_item_4
+ $5f65 defs $33      ; sprite 4
 
+@defs=$5F98:$68,$00
 ; Unused padding.
-s$5f98 defs $6b
+s$5f98 defs $68
 
 ; Entry address after copying data from cartridge.
 c$6000 jp $61bf      ;
@@ -2023,11 +2033,13 @@ c$68f2 ld hl,$690e   ; #REGhl=alien sprite lookup table
  $68fd ld d,$00      ; }
  $68ff add hl,de     ; Add offset
  $6900 push hl       ;
- $6901 ld de,$5e00   ; #REGde=first alien sprite buffer
+ $6901 ld de,$5e00   ; #REGde=right facing alien sprite buffer
  $6904 call $6eef    ; Reset rocket and copy sprite to buffer
  $6907 pop hl        ;
- $6908 ld de,$5e66   ; #REGde=second alien sprite buffer
- $690b jp $6f16      ; Copy sprite to buffer
+ $6908 ld de,$5e66   ; #REGde=left facing alien sprite buffer
+; Set rocket building state on Jetman, then copy sprites to the first pair of
+; buffers.
+ $690b jp $6f16      ; Jetman rocket state update
 
 ; Alien sprite lookup table.
 ;
@@ -2988,13 +3000,13 @@ c$6ec2 ld c,a        ;
  $6eca ld c,a        ; {#REGbc=sprite offset value
  $6ecb ld b,$00      ; }
  $6ecd ld hl,$678c   ; Collectible sprite lookup table
- $6ed0 add hl,bc     ;
- $6ed1 ld de,$5ecc   ; #REGde=start of rocket sprite buffers
+ $6ed0 add hl,bc     ; Offset address
+ $6ed1 ld de,$5ecc   ; #REGde=start of buffers for all item sprites
  $6ed4 ld a,$02      ;
  $6ed6 ld ($5dd3),a  ; Set default for rocket module attached value
  $6ed9 xor a         ;
  $6eda ld ($5dd2),a  ; Set default for Jetman rocket module connected value
- $6edd ld c,$04      ; Loop counter
+ $6edd ld c,$04      ; Loop counter - all 4 sprites?
  $6edf xor a         ;
 *$6ee0 push bc       ; Backup loop counter
  $6ee1 ld b,a        ; #REGa starts at $00, then returns value from #R$6f0b
@@ -3022,7 +3034,7 @@ c$6eef ld bc,$0002   ; #REGbc=sprite count
  $6ef8 jr $6f20      ;
 
 ; Old unused routines.
-s$6efa defs $11
+i$6efa
 
 ; Get address to sprite pixel data, and copy to a buffer.
 ;
@@ -3612,17 +3624,24 @@ c$715a ld hl,$0018   ; {Display "1UP" text at column 24
  $716f ld de,$7179   ;
  $7172 jp $7134      ; }
 
-; "1UP" score label - colour byte followed by ASCII characters.
-@label=Labels1UP
-b$7175 defb $47,$31,$55,$d0
+; GFX score labels.
+;
+; As displayed in the status bar - the last char includes an EOL bit ($80).
+; #TABLE(default,centre,:w)
+; { =h Bits(n) | =h Option }
+; { 0 | Colour Attribute }
+; { 1..n | ASCII char, n=EOL bit }
+; TABLE#
+@label=ScoreLabel1UP
+b$7175 defb $47,$31,$55,$d0 ; WHITE "1UP" score label
 
-; "2UP" score label - colour byte followed by ASCII characters.
-@label=Labels2UP
-b$7179 defb $47,$32,$55,$d0
+; Data block at 7179
+@label=ScoreLabel2UP
+b$7179 defb $47,$32,$55,$d0 ; WHITE "2UP" score label
 
-; "HI" score label - colour byte followed by ASCII characters.
-@label=LabelsHI
-b$717d defb $45,$48,$c9
+; Data block at 717d
+@label=ScoreLabelHI
+b$717d defb $45,$48,$c9 ; CYAN  "HI" score label
 
 ; Clears the entire ZX Spectrum display file.
 ;
@@ -3768,23 +3787,24 @@ c$71ef ld hl,($5dc0) ; #REGhl=Actor.X/Y position
 ;        HL Screen address of sprite.
 ;        DE Address pointing to the pixel data block.
 @label=GetSpritePosition
-c$71f2 ld a,(de)     ; #REGa=header byte
- $71f3 inc de        ; #REGde=width byte
- $71f4 add a,l       ; {#REGl=X column + header byte
+c$71f2 ld a,(de)     ; #REGa=header value: X position offset?
+ $71f3 inc de        ; #REGde=next header value: sprite width
+ $71f4 add a,l       ; {#REGl=X position + offset
  $71f5 ld l,a        ; }
- $71f6 call $72d0    ; #REGhl=coord to screen address (using #REGhl)
- $71f9 ld a,(de)     ; {#REGb=sprite width
+ $71f6 call $72d0    ; #REGhl=coord to screen address (using/returning #REGhl)
+ $71f9 ld a,(de)     ; {#REGb=read sprite width again
  $71fa ld b,a        ; }
- $71fb inc de        ; {#REGa=sprite height
+ $71fb inc de        ; {#REGa=next header value: sprite height
  $71fc ld a,(de)     ; }
-@ssub=ld ($5dc0+$05),a ; Set Actor current sprite height to this sprite height
+@ssub=ld ($5dc0+$05),a ; Set Actor height to header height value
  $71fd ld ($5dc5),a  ;
 
 ; Increment Sprite/Buffer address location.
 ;
-; Used by the routine at #R$7207.
+; Used by the routines at #R$71f2 and #R$7207 to increment #REGde and reset
+; #REGc.
 c$7200 ld c,$00      ;
- $7202 inc de        ; #REGde=first byte of pixel data
+ $7202 inc de        ; #REGde=next header value: sprite data bytes
  $7203 ret           ;
 
 ; Sprite finder from X position.
@@ -3792,22 +3812,22 @@ c$7200 ld c,$00      ;
 ; Used by the routines at #R$7232 and #R$727d.
 c$7204 call $72ab    ; Find sprite address using X position.
 
-; Update Actor.
+; Update actor state.
 ;
 ; Get sprite position/dimensions, and update actor. Used by the routines at
 ; #R$7226 and #R$7263.
 ;
-;  Input:DE Address to the start of a Sprite or Buffer.
-;        IX Actor object for a fuel pod, collectible, etc.
+;  Input:DE Address of header block for sprite or buffer data.
+;        IX Actor object states: jetman, item, rocket, alien, etc.
 ; Output:B Is the sprite width.
 ;        C Is always NULL.
-;        HL Screen address of sprite.
-;        DE Address pointing to the pixel data block.
+;        HL Pixel coordinates (Y/X) of the actor
+;        DE Start address pointing at the "sprite data" block.
 @label=ActorUpdate
 c$7207 ld l,(ix+$01) ; #REGl=actor X location
  $720a ld h,(ix+$02) ; #REGh=actor Y location
  $720d ld a,(de)     ; #REGa=sprite header byte
- $720e inc de        ; #REGde=sprite width byte
+ $720e inc de        ; #REGde=next header value: sprite width
  $720f add a,l       ; {#REGl=X column + header byte
  $7210 ld l,a        ; }
  $7211 ld ($5dcf),hl ; Set actor_coords variable with these actor coordinates
@@ -3816,7 +3836,7 @@ c$7207 ld l,(ix+$01) ; #REGl=actor X location
  $7218 ld b,a        ; }
 @ssub=ld ($5dc0+$04),a ; Actor width=sprite width
  $7219 ld ($5dc4),a  ;
- $721c inc de        ; {#REGa=sprite height
+ $721c inc de        ; {#REGa=next header value: sprite height
  $721d ld a,(de)     ; }
 @ssub=ld ($5dc0+$06),a ; Set Actor sprite height
  $721e ld ($5dc6),a  ;
@@ -3843,12 +3863,12 @@ c$7232 call $7204    ; Find sprite using X position and update actor
  $7235 exx           ;
  $7236 call $71ec    ; Find sprite using actor and get address
 
-; Erase Actor sprite from old position.
+; Erase an actor sprite - after an it's been moved.
 ;
 ; Used by the routine at #R$7226.
 ;
 ; Input:IX Actor object.
-@label=ActorEraseSprite
+@label=ActorEraseMovedSprite
 @ssub=ld a,($5dc0+$01) ; #REGa=actor Y position
 c$7239 ld a,($5dc1)  ;
  $723c sub (ix+$02)  ; Subtract the actor Y position
@@ -3938,9 +3958,9 @@ c$7289 ld a,($5dc0)  ; #REGa=actor X position
 ;        C Sprite header byte or X position.
 ; Output:DE Address for sprite.
 @label=ActorGetSpriteAddress
-c$7292 bit 6,a       ; {If bit-6 is set, then set bit 3 of #REGc
- $7294 jr z,$7298    ;
- $7296 set 3,c       ; }
+c$7292 bit 6,a       ;
+ $7294 jr z,$7298    ; Jump if bit-6 of header is reset
+ $7296 set 3,c       ; else set bit-3 of X position
 *$7298 dec a         ; {Calculate offset for sprite lookup table
  $7299 rlca          ;
  $729a rlca          ;
@@ -3949,7 +3969,7 @@ c$7292 bit 6,a       ; {If bit-6 is set, then set bit 3 of #REGc
  $729d and $f0       ;
  $729f or c          ; }
  $72a0 ld c,a        ;
- $72a1 ld b,$00      ; #REGbc=sprite lookup table offset
+ $72a1 ld b,$00      ; #REGbc=lookup table offset
  $72a3 ld hl,$76c5   ; #REGhl=start of Jetman/Buffer sprite lookup tables
  $72a6 add hl,bc     ;
  $72a7 ld e,(hl)     ; {#REGde=sprite address
@@ -3957,10 +3977,15 @@ c$7292 bit 6,a       ; {If bit-6 is set, then set bit 3 of #REGc
  $72a9 ld d,(hl)     ; }
  $72aa ret           ;
 
-; Get actor sprite address from X position.
+; Move an actor's sprite to it's current position.
+;
+; The IX register can point to one of the actor object types:
+; `jetman_direction`, `item_state`, or one of the 6 `alien_states`.
 ;
 ; Used by the routine at #R$7204.
-@label=ActorGetSpriteAddressPosX
+;
+; Input:IX actor object.
+@label=ActorMoveSprite
 c$72ab ld a,(ix+$01) ; #REGa=X position
  $72ae and $06       ;
  $72b0 ld c,a        ;
@@ -3991,7 +4016,7 @@ c$72b6 dec h         ;
  $72ca ret           ;
 
 ; Unused code.
-s$72cb defs $05
+i$72cb
 
 ; Convert a Y,X pixel coordinate to a DISPLAY_FILE address.
 ;
@@ -4739,54 +4764,60 @@ b$76b5 defb $bd,$ff,$ff,$f7,$eb,$dd,$ad,$04
 @label=tile_platform_right
 b$76bd defb $4c,$fe,$ff,$3e,$ff,$fe,$9c,$08
 
-; Jetman sprite address lookup table.
-@label=jetman_sprite_table
-w$76c5 defw $7761    ; Flying right 1
- $76c7 defw $7794    ; Flying right 2
- $76c9 defw $77df    ; Flying right 3
- $76cb defw $782a    ; Flying right 4
- $76cd defw $7926    ; Flying left 4
- $76cf defw $78db    ; Flying left 3
- $76d1 defw $78a8    ; Flying left 2
- $76d3 defw $7875    ; Flying left 1
- $76d5 defw $7a6d    ; Walking right 1
- $76d7 defw $7aa0    ; Walking right 2
- $76d9 defw $7ad3    ; Walking right 3
- $76db defw $7b1e    ; Walking right 4
- $76dd defw $7a22    ; Walking left 4
- $76df defw $79d7    ; Walking left 3
- $76e1 defw $79a4    ; Walking left 2
- $76e3 defw $7971    ; Walking left 1
-
-; Buffer sprite lookup table.
+; Sprite/Buffer lookup tables.
 ;
-; NOTE: must directly follow jetman_sprite_table, is not accessed directly.
-@label=buffers_lookup_table
-w$76e5 defw $5e00    ; Baddie R1
- $76e7 defw $5e00    ; Baddie R1
- $76e9 defw $5e33    ; Baddie R2
- $76eb defw $5e33    ; Baddie R2
- $76ed defw $5e99    ; Baddie L2
- $76ef defw $5e99    ; Baddie L2
- $76f1 defw $5e66    ; Baddie L1
- $76f3 defw $5e66    ; Baddie L1
- $76f5 defw $5ecc    ; Item R1
- $76f7 defw $5eff    ; Item R2
- $76f9 defw $5f32    ; Item L1
- $76fb defw $5f65    ; Item L2
- $76fd defw $5f65    ; Item L2
- $76ff defw $5f32    ; Item L1
- $7701 defw $5eff    ; Item R2
- $7703 defw $5ecc    ; Item R1
+; The following 3 lookup tables must remain together as they are all accessed
+; via this first label. Lookup table for the Jetman sprite GFX addresses.
+@label=sprite_lookup_tables
+@label=jetman_sprite_table
+w$76c5 defw $7761    ; fly right 1
+ $76c7 defw $7794    ; fly right 2
+ $76c9 defw $77df    ; fly right 3
+ $76cb defw $782a    ; fly right 4
+ $76cd defw $7926    ; fly left 4
+ $76cf defw $78db    ; fly left 3
+ $76d1 defw $78a8    ; fly left 2
+ $76d3 defw $7875    ; fly left 1
+ $76d5 defw $7a6d    ; walk right 1
+ $76d7 defw $7aa0    ; walk right 2
+ $76d9 defw $7ad3    ; walk right 3
+ $76db defw $7b1e    ; walk right 4
+ $76dd defw $7a22    ; walk left 4
+ $76df defw $79d7    ; walk left 3
+ $76e1 defw $79a4    ; walk left 2
+ $76e3 defw $7971    ; walk left 1
+
+; Lookup table for the alien sprites buffer addresses.
+@label=buffers_aliens_lookup_table
+w$76e5 defw $5e00    ; right facing, anim frame 1
+ $76e7 defw $5e00    ; right facing, anim frame 1
+ $76e9 defw $5e33    ; right facing, anim frame 2
+ $76eb defw $5e33    ; right facing, anim frame 2
+ $76ed defw $5e99    ; left facing,  anim frame 2
+ $76ef defw $5e99    ; left facing,  anim frame 2
+ $76f1 defw $5e66    ; left facing,  anim frame 1
+ $76f3 defw $5e66    ; left facing,  anim frame 1
+; Lookup table for the item sprites buffer addresses.
+@label=buffers_items_lookup_table
+ $76f5 defw $5ecc    ; sprite 1
+ $76f7 defw $5eff    ; sprite 2
+ $76f9 defw $5f32    ; sprite 3
+ $76fb defw $5f65    ; sprite 4
+ $76fd defw $5f65    ; sprite 4
+ $76ff defw $5f32    ; sprite 3
+ $7701 defw $5eff    ; sprite 2
+ $7703 defw $5ecc    ; sprite 1
 
 ; Erase sprite pixels when actor/sprite moves.
 ;
 ; Used by the routines at #R$7239, #R$7270, #R$7280 and #R$775b.
 ;
-; Input:B Loop counter.
-;       C Actor Y position, or zero?
-;       DE Address into a sprite/buffer.
-;       HL Address in the DISPLAY_FILE.
+;  Input:B Loop counter.
+;        C Actor Y position, or zero?
+;        DE Address into a sprite/buffer.
+;        HL Address in the DISPLAY_FILE.
+; Output:BC is this the unchanged input value?
+;        HL is this the unchanged input value?
 @label=MaskSprite
 c$7705 ld a,c        ; {Jump if vertical position is zero
  $7706 and a         ;
@@ -4877,13 +4908,14 @@ c$775b ld ($5dc6),a  ;
 
 ; Actor/Collectible sprites start with a 3-byte header.
 ;
-; #TABLE(default,centre,:w)
-; { =h Bytes(n) | =h Meaning }
-; { 0 | Unknown Header Byte }
-; { 1 | Width (tiles) }
-; { 2 | Height (pixels)  }
-; { 3... | Pixel data  }
-; TABLE#
+; +----------+--------------------+
+; | Bytes(n) | Definition         |
+; +----------+--------------------+
+; | 0        | X position offset? |
+; | 1        | Width (tiles)      |
+; | 2        | Height (pixels)    |
+; | 3...     | Pixel data         |
+; +----------+--------------------+
 
 ; Jetman sprite for flying right #1.
 @label=gfx_jetman_fly_right1
@@ -5293,11 +5325,12 @@ b$7e4b defb $00
 
 ; Alien sprites start with a 1-byte header, and are always 16 pixels wide.
 ;
-; #TABLE(default,centre,:w)
-; { =h Bytes(n) | =h Meaning }
-; { 0 | Height (pixels)  }
-; { 1... | Pixel data  }
-; TABLE#
+; +----------+-----------------+
+; | Bytes(n) | Definition      |
+; +----------+-----------------+
+; | 0        | Height (pixels) |
+; | 1...     | Pixel data      |
+; +----------+-----------------+
 
 ; Squidgy Alien sprite #1.
 @label=gfx_squidgy_alien1
@@ -5386,7 +5419,7 @@ b$7f7a defb $00
  $7f95 defb $2d,$2e,$12,$f4,$bf,$7a,$1f,$fc
 
 ; Unused bytes.
-s$7f9d defs $16
+i$7f9d
 
 ; Jetpac loading screen image
 ;

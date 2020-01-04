@@ -1,17 +1,10 @@
-; JETPAC disassembled source code
-; (https://github.com/mrcook/jetpac-disassembly)
-;
-; Copyright (c) 2018 Michael R. Cook (this disassembly)
-; Copyright (c) 1983 Ultimate Play the Game (JETPAC)
-; JETPAC was designed and developed by Tim Stamper and Chris Stamper
-
 ; Frame counter.
 ;
 ; These lower two bytes of frame counter are incremented every 20 ms.
 
-SYSVAR_FRAMES EQU $5c78
+SYSVAR_FRAMES EQU $5C78
 
-  ORG $6000
+  ORG $5CCB
 
 ; Stack: 37 bytes of memory allocated for use as the system stack.
 stack_memory:
@@ -52,6 +45,7 @@ L5CFA:
 
 ; Jetman direction.
 ;
+; Indicates the direction that Jetman is travelling/facing.
 ; +------+----------+------------------------+
 ; | Byte | Bits     | Direction              |
 ; +------+----------+------------------------+
@@ -85,6 +79,7 @@ jetman_colour:
 
 ; Jetman moving direction.
 ;
+; Indicates the direction in which Jetman is moving.
 ; +---------+-----------------------------+
 ; | Bits(n) | Direction                   |
 ; +---------+-----------------------------+
@@ -162,6 +157,7 @@ rocket_state:
 
 ; Rocket module state (fuel/part).
 ;
+; NOTE: Used for top module at level start, then only fuel pods.
 ; +----------+---------------------------------------------------+
 ; | Bytes(n) | Variable                                          |
 ; +----------+---------------------------------------------------+
@@ -179,6 +175,8 @@ rocket_module_state:
 
 ; Current Collectible object.
 ;
+; Used for the middle ship module at level start, then only collectibles. The
+; "state" field is not used for collectibles (remains $00).
 ; +----------+---------------------------------------------------+
 ; | Bytes(n) | Variable                                          |
 ; +----------+---------------------------------------------------+
@@ -196,6 +194,9 @@ item_state:
 
 ; Thruster/Explosion animation sprite state.
 ;
+; Holds the sprite state for the current animation frame being displayed for
+; Jetman's jetpac thruster "smoke". Note: each animation loop uses a (random)
+; two colour pair from the 4 possible colours.
 ; +----------+----------------------------------------------+
 ; | Bytes(n) | Variable                                     |
 ; +----------+----------------------------------------------+
@@ -213,6 +214,8 @@ jetman_thruster_anim_state:
 
 ; Alien state objects.
 ;
+; There are a maximum of 6 aliens on the screen at one time, and those states
+; are stored here in this data block. See Jetman object for more details.
 ; +----------+------------------------+
 ; | Bytes(n) | Variable               |
 ; +----------+------------------------+
@@ -235,6 +238,9 @@ alien_states:
 
 ; Jetman exploding animation object.
 ;
+; Holds the sprite state for the current animation frame being displayed for
+; the explosion sprite when Jetman is killed. Note: each animation loop uses a
+; (random) two colour pair from the 4 possible colours.
 ; +----------+-------------------------------------+
 ; | Bytes(n) | Variable                            |
 ; +----------+-------------------------------------+
@@ -274,6 +280,7 @@ L5DB8:
 
 ; Temporary actor state.
 ;
+; Many actor routines use this to hold state temporarily during updates.
 ; +----------+-----------------------------------------------------------+
 ; | Bytes(n) | Variable                                                  |
 ; +----------+-----------------------------------------------------------+
@@ -399,7 +406,7 @@ player_lives:
 
 ; Unused padding for player level/lives object (8 bytes total).
 L5DF2:
-  defb $00,$00,$00,$00,$00,$00
+  defs $06
 
 ; Game level for inactive player.
 ;
@@ -413,10 +420,12 @@ inactive_player_lives:
 
 ; Unused padding for inactive player level/lives object (8 bytes total).
 L5DFA:
-  defb $00,$00,$00,$00,$00,$00
+  defs $06
 
 ; Buffers for Alien sprites.
 ;
+; 4 buffers representing left/right facing aliens, with 2 animation frames
+; each.
 ; +----------+----------------------------+
 ; | Bytes(n) | Meaning                    |
 ; +----------+----------------------------+
@@ -425,17 +434,18 @@ L5DFA:
 ; | $02      | Height value               |
 ; | $03-$33  | Pixel data                 |
 ; +----------+----------------------------+
-buffer_alien_r1:
-  defs $33
-buffer_alien_r2:
-  defs $33
-buffer_alien_l1:
-  defs $33
-buffer_alien_l2:
-  defs $33
+buffers_aliens_R1:
+  defs $33                ; right facing, anim frame 1
+buffers_aliens_R2:
+  defs $33                ; right facing, anim frame 2
+buffers_aliens_L1:
+  defs $33                ; left facing, anim frame 1
+buffers_aliens_L2:
+  defs $33                ; left facing, anim frame 2
 
 ; Buffers for Collectible/Rocket sprites.
 ;
+; Buffer to hold 4 item sprites.
 ; +----------+---------------------------+
 ; | Bytes(n) | Meaning                   |
 ; +----------+---------------------------+
@@ -444,18 +454,18 @@ buffer_alien_l2:
 ; | $02      | Height value              |
 ; | $03-$33  | Pixel data                |
 ; +----------+---------------------------+
-buffer_item_r1:
-  defs $33
-buffer_item_r2:
-  defs $33
-buffer_item_l1:
-  defs $33
-buffer_item_l2:
-  defs $33
+buffers_item_1:
+  defs $33                ; sprite 1
+buffers_item_2:
+  defs $33                ; sprite 2
+buffers_item_3:
+  defs $33                ; sprite 3
+buffers_item_4:
+  defs $33                ; sprite 4
 
 ; Unused padding.
 L5F98:
-  defs $6b
+  defs $68
 
 ; Entry address after copying data from cartridge.
 L6000:
@@ -1878,6 +1888,8 @@ SfxSetExplodeParams:
 
 ; Default explosion SFX parameters.
 ;
+; These parameters are used in pairs: SFX #1 is used for most aliens, while SFX
+; #2 is used for player, sphere alien, and crossed ship.
 ; +----------+------------------+
 ; | Bytes(n) | Parameter        |
 ; +----------+------------------+
@@ -2085,11 +2097,13 @@ AlienBufferInit:
   ld d,$00                ;
   add hl,de               ; Add offset
   push hl
-  ld de,buffer_alien_r1   ; DE=first alien sprite buffer
+  ld de,buffers_aliens_R1 ; DE=right facing alien sprite buffer
   call RocketBuildStateReset ; Reset rocket and copy sprite to buffer
   pop hl
-  ld de,buffer_alien_l1   ; DE=second alien sprite buffer
-  jp JetmanRocketStateUpdate ; Copy sprite to buffer
+  ld de,buffers_aliens_L1 ; DE=left facing alien sprite buffer
+; Set rocket building state on Jetman, then copy sprites to the first pair of
+; buffers.
+  jp JetmanRocketStateUpdate ; Jetman rocket state update
 
 ; Alien sprite lookup table.
 ;
@@ -3122,14 +3136,14 @@ BufferCopyRocket:
   ld c,a                  ; BC=sprite offset value
   ld b,$00                ;
   ld hl,collectible_sprite_table ; Collectible sprite lookup table
-  add hl,bc
-  ld de,buffer_item_r1    ; DE=start of rocket sprite buffers
+  add hl,bc               ; Offset address
+  ld de,buffers_item_1    ; DE=start of buffers for all item sprites
   ld a,$02
   ld (rocket_mod_attached),a ; Set default for rocket module attached value
   xor a
   ld (jetman_rocket_mod_connected),a ; Set default for Jetman rocket module
                                      ; connected value
-  ld c,$04                ; Loop counter
+  ld c,$04                ; Loop counter - all 4 sprites?
   xor a
 BufferCopyRocket_0:
   push bc                 ; Backup loop counter
@@ -3160,7 +3174,7 @@ RocketBuildStateReset:
 
 ; Old unused routines.
 L6EFA:
-  defs $11
+
 
 ; Get address to sprite pixel data, and copy to a buffer.
 ;
@@ -3761,26 +3775,34 @@ WriteEOLChar:
 ; Used by the routine at ResetScreen.
 DrawStatusBarLabels:
   ld hl,$0018             ; Display "1UP" text at column 24
-  ld de,Labels1UP         ;
+  ld de,ScoreLabel1UP     ;
   call DisplayString      ;
   ld hl,$0078             ; Display "HI" text at column 120
-  ld de,LabelsHI          ;
+  ld de,ScoreLabelHI      ;
   call DisplayString      ;
   ld hl,$00d8             ; Display "2UP" text at column 216
-  ld de,Labels2UP         ;
+  ld de,ScoreLabel2UP     ;
   jp DisplayString        ;
 
-; "1UP" score label - colour byte followed by ASCII characters.
-Labels1UP:
-  defb $47,$31,$55,$d0
+; GFX score labels.
+;
+; As displayed in the status bar - the last char includes an EOL bit ($80).
+; +---------+-----------------------+
+; | Bits(n) | Option                |
+; +---------+-----------------------+
+; | 0       | Colour Attribute      |
+; | 1..n    | ASCII char, n=EOL bit |
+; +---------+-----------------------+
+ScoreLabel1UP:
+  defb $47,$31,$55,$d0    ; WHITE "1UP" score label
 
-; "2UP" score label - colour byte followed by ASCII characters.
-Labels2UP:
-  defb $47,$32,$55,$d0
+; Data block at 7179
+ScoreLabel2UP:
+  defb $47,$32,$55,$d0    ; WHITE "2UP" score label
 
-; "HI" score label - colour byte followed by ASCII characters.
-LabelsHI:
-  defb $45,$48,$c9
+; Data block at 717d
+ScoreLabelHI:
+  defb $45,$48,$c9        ; CYAN  "HI" score label
 
 ; Clears the entire ZX Spectrum display file.
 ;
@@ -3931,48 +3953,48 @@ L71EF:
 ;        HL Screen address of sprite.
 ;        DE Address pointing to the pixel data block.
 GetSpritePosition:
-  ld a,(de)               ; A=header byte
-  inc de                  ; DE=width byte
-  add a,l                 ; L=X column + header byte
+  ld a,(de)               ; A=header value: X position offset?
+  inc de                  ; DE=next header value: sprite width
+  add a,l                 ; L=X position + offset
   ld l,a                  ;
-  call Coord2Scr          ; HL=coord to screen address (using HL)
-  ld a,(de)               ; B=sprite width
+  call Coord2Scr          ; HL=coord to screen address (using/returning HL)
+  ld a,(de)               ; B=read sprite width again
   ld b,a                  ;
-  inc de                  ; A=sprite height
+  inc de                  ; A=next header value: sprite height
   ld a,(de)               ;
-  ld (actor+$05),a        ; Set Actor current sprite height to this sprite
-                          ; height
+  ld (actor+$05),a        ; Set Actor height to header height value
 
 ; Increment Sprite/Buffer address location.
 ;
-; Used by the routine at ActorUpdate.
+; Used by the routines at GetSpritePosition and ActorUpdate to increment DE and
+; reset C.
 L7200:
   ld c,$00
-  inc de                  ; DE=first byte of pixel data
+  inc de                  ; DE=next header value: sprite data bytes
   ret
 
 ; Sprite finder from X position.
 ;
 ; Used by the routines at L7232 and L727D.
 L7204:
-  call ActorGetSpriteAddressPosX ; Find sprite address using X position.
+  call ActorMoveSprite    ; Find sprite address using X position.
 
-; Update Actor.
+; Update actor state.
 ;
 ; Get sprite position/dimensions, and update actor. Used by the routines at
 ; ActorUpdatePosition and ActorEraseAnimSprite.
 ;
-;  Input:DE Address to the start of a Sprite or Buffer.
-;        IX Actor object for a fuel pod, collectible, etc.
+;  Input:DE Address of header block for sprite or buffer data.
+;        IX Actor object states: jetman, item, rocket, alien, etc.
 ; Output:B Is the sprite width.
 ;        C Is always NULL.
-;        HL Screen address of sprite.
-;        DE Address pointing to the pixel data block.
+;        HL Pixel coordinates (Y/X) of the actor
+;        DE Start address pointing at the "sprite data" block.
 ActorUpdate:
   ld l,(ix+$01)           ; L=actor X location
   ld h,(ix+$02)           ; H=actor Y location
   ld a,(de)               ; A=sprite header byte
-  inc de                  ; DE=sprite width byte
+  inc de                  ; DE=next header value: sprite width
   add a,l                 ; L=X column + header byte
   ld l,a                  ;
   ld (actor_coords),hl    ; Set actor_coords variable with these actor
@@ -3981,7 +4003,7 @@ ActorUpdate:
   ld a,(de)               ; B=sprite width
   ld b,a                  ;
   ld (actor+$04),a        ; Actor width=sprite width
-  inc de                  ; A=sprite height
+  inc de                  ; A=next header value: sprite height
   ld a,(de)               ;
   ld (actor+$06),a        ; Set Actor sprite height
   ld (actor+$03),a        ; Set Actor height to sprite height
@@ -3997,7 +4019,7 @@ ActorUpdatePosition:
   pop de
   call ActorUpdate        ; Update actor
   exx
-  jr ActorEraseSprite     ; Erase actor sprite
+  jr ActorEraseMovedSprite ; Erase actor sprite
 
 ; Now update and erase the actor.
 ;
@@ -4008,16 +4030,16 @@ L7232:
   exx
   call L71EC              ; Find sprite using actor and get address
 
-; Erase Actor sprite from old position.
+; Erase an actor sprite - after an it's been moved.
 ;
 ; Used by the routine at ActorUpdatePosition.
 ;
 ; Input:IX Actor object.
-ActorEraseSprite:
+ActorEraseMovedSprite:
   ld a,(actor+$01)        ; A=actor Y position
   sub (ix+$02)            ; Subtract the actor Y position
   jp z,ActorUpdateSize    ; Update actor size if 0
-  jp m,ActorEraseSprite_0 ; Jump if result is negative
+  jp m,ActorEraseMovedSprite_0 ; Jump if result is negative
   ld c,a                  ; else C=result
   ld a,(actor+$05)        ; A=actor current sprite height
   cp c
@@ -4025,7 +4047,7 @@ ActorEraseSprite:
   sub c                   ; else subtract C
   ld (actor+$05),a        ; Update actor current sprite height
   jp MaskSprite           ; Mask sprite pixels
-ActorEraseSprite_0:
+ActorEraseMovedSprite_0:
   exx
   neg
   ld c,a
@@ -4093,15 +4115,15 @@ ActorFindPosDir:
 
 ; Get actor sprite address.
 ;
-; Used by the routine at ActorGetSpriteAddressPosX.
+; Used by the routine at ActorMoveSprite.
 ;
 ;  Input:A Sprite header byte or Actor movement.
 ;        C Sprite header byte or X position.
 ; Output:DE Address for sprite.
 ActorGetSpriteAddress:
-  bit 6,a                      ; If bit-6 is set, then set bit 3 of C
-  jr z,ActorGetSpriteAddress_0 ;
-  set 3,c                      ;
+  bit 6,a
+  jr z,ActorGetSpriteAddress_0 ; Jump if bit-6 of header is reset
+  set 3,c                 ; else set bit-3 of X position
 ActorGetSpriteAddress_0:
   dec a                   ; Calculate offset for sprite lookup table
   rlca                    ;
@@ -4111,7 +4133,7 @@ ActorGetSpriteAddress_0:
   and $f0                 ;
   or c                    ;
   ld c,a
-  ld b,$00                ; BC=sprite lookup table offset
+  ld b,$00                ; BC=lookup table offset
   ld hl,jetman_sprite_table ; HL=start of Jetman/Buffer sprite lookup tables
   add hl,bc
   ld e,(hl)               ; DE=sprite address
@@ -4119,10 +4141,15 @@ ActorGetSpriteAddress_0:
   ld d,(hl)               ;
   ret
 
-; Get actor sprite address from X position.
+; Move an actor's sprite to it's current position.
+;
+; The IX register can point to one of the actor object types:
+; `jetman_direction`, `item_state`, or one of the 6 `alien_states`.
 ;
 ; Used by the routine at L7204.
-ActorGetSpriteAddressPosX:
+;
+; Input:IX actor object.
+ActorMoveSprite:
   ld a,(ix+$01)           ; A=X position
   and $06
   ld c,a
@@ -4154,7 +4181,7 @@ EraseSpritesHelper:
 
 ; Unused code.
 L72CB:
-  defs $05
+
 
 ; Convert a Y,X pixel coordinate to a DISPLAY_FILE address.
 ;
@@ -4938,55 +4965,60 @@ tile_platfor_mmiddle:
 tile_platform_right:
   defb $4c,$fe,$ff,$3e,$ff,$fe,$9c,$08
 
-; Jetman sprite address lookup table.
-jetman_sprite_table:
-  defw gfx_jetman_fly_right1 ; Flying right 1
-  defw gfx_jetman_fly_right2 ; Flying right 2
-  defw gfx_jetman_fly_right3 ; Flying right 3
-  defw gfx_jetman_fly_right4 ; Flying right 4
-  defw gfx_jetman_fly_left4 ; Flying left 4
-  defw gfx_jetman_fly_left3 ; Flying left 3
-  defw gfx_jetman_fly_left2 ; Flying left 2
-  defw gfx_jetman_fly_left1 ; Flying left 1
-  defw gfx_jetman_walk_right1 ; Walking right 1
-  defw gfx_jetman_walk_right2 ; Walking right 2
-  defw gfx_jetman_walk_right3 ; Walking right 3
-  defw gfx_jetman_walk_right4 ; Walking right 4
-  defw gfx_jetman_walk_left4 ; Walking left 4
-  defw gfx_jetman_walk_left3 ; Walking left 3
-  defw gfx_jetman_walk_left2 ; Walking left 2
-  defw gfx_jetman_walk_left1 ; Walking left 1
-
-; Buffer sprite lookup table.
+; Sprite/Buffer lookup tables.
 ;
-; NOTE: must directly follow jetman_sprite_table, is not accessed directly.
-buffers_lookup_table:
-  defw buffer_alien_r1    ; Baddie R1
-  defw buffer_alien_r1    ; Baddie R1
-  defw buffer_alien_r2    ; Baddie R2
-  defw buffer_alien_r2    ; Baddie R2
-  defw buffer_alien_l2    ; Baddie L2
-  defw buffer_alien_l2    ; Baddie L2
-  defw buffer_alien_l1    ; Baddie L1
-  defw buffer_alien_l1    ; Baddie L1
-  defw buffer_item_r1     ; Item R1
-  defw buffer_item_r2     ; Item R2
-  defw buffer_item_l1     ; Item L1
-  defw buffer_item_l2     ; Item L2
-  defw buffer_item_l2     ; Item L2
-  defw buffer_item_l1     ; Item L1
-  defw buffer_item_r2     ; Item R2
-  defw buffer_item_r1     ; Item R1
+; The following 3 lookup tables must remain together as they are all accessed
+; via this first label. Lookup table for the Jetman sprite GFX addresses.
+jetman_sprite_table:
+  defw gfx_jetman_fly_right1 ; fly right 1
+  defw gfx_jetman_fly_right2 ; fly right 2
+  defw gfx_jetman_fly_right3 ; fly right 3
+  defw gfx_jetman_fly_right4 ; fly right 4
+  defw gfx_jetman_fly_left4 ; fly left 4
+  defw gfx_jetman_fly_left3 ; fly left 3
+  defw gfx_jetman_fly_left2 ; fly left 2
+  defw gfx_jetman_fly_left1 ; fly left 1
+  defw gfx_jetman_walk_right1 ; walk right 1
+  defw gfx_jetman_walk_right2 ; walk right 2
+  defw gfx_jetman_walk_right3 ; walk right 3
+  defw gfx_jetman_walk_right4 ; walk right 4
+  defw gfx_jetman_walk_left4 ; walk left 4
+  defw gfx_jetman_walk_left3 ; walk left 3
+  defw gfx_jetman_walk_left2 ; walk left 2
+  defw gfx_jetman_walk_left1 ; walk left 1
+
+; Lookup table for the alien sprites buffer addresses.
+buffers_aliens_lookup_table:
+  defw buffers_aliens_R1  ; right facing, anim frame 1
+  defw buffers_aliens_R1  ; right facing, anim frame 1
+  defw buffers_aliens_R2  ; right facing, anim frame 2
+  defw buffers_aliens_R2  ; right facing, anim frame 2
+  defw buffers_aliens_L2  ; left facing,  anim frame 2
+  defw buffers_aliens_L2  ; left facing,  anim frame 2
+  defw buffers_aliens_L1  ; left facing,  anim frame 1
+  defw buffers_aliens_L1  ; left facing,  anim frame 1
+; Lookup table for the item sprites buffer addresses.
+buffers_items_lookup_table:
+  defw buffers_item_1     ; sprite 1
+  defw buffers_item_2     ; sprite 2
+  defw buffers_item_3     ; sprite 3
+  defw buffers_item_4     ; sprite 4
+  defw buffers_item_4     ; sprite 4
+  defw buffers_item_3     ; sprite 3
+  defw buffers_item_2     ; sprite 2
+  defw buffers_item_1     ; sprite 1
 
 ; Erase sprite pixels when actor/sprite moves.
 ;
-; Used by the routines at ActorEraseSprite, ActorEraseDestroyed, L7280 and
+; Used by the routines at ActorEraseMovedSprite, ActorEraseDestroyed, L7280 and
 ; L775B.
 ;
-; Input:B Loop counter.
-;       C Actor Y position, or zero?
-;       DE Address into a sprite/buffer.
-;       HL Address in the DISPLAY_FILE.
+;  Input:B Loop counter.
+;        C Actor Y position, or zero?
+;        DE Address into a sprite/buffer.
+;        HL Address in the DISPLAY_FILE.
+; Output:BC is this the unchanged input value?
+;        HL is this the unchanged input value?
 MaskSprite:
   ld a,c                  ; Jump if vertical position is zero
   and a                   ;
@@ -5051,13 +5083,13 @@ MaskSprite_6:
 
 ; EXX then update Actor.
 ;
-; Used by the routine at ActorEraseSprite.
+; Used by the routine at ActorEraseMovedSprite.
 L7747:
   exx
 
 ; Update Actor height related values.
 ;
-; Used by the routine at ActorEraseSprite.
+; Used by the routine at ActorEraseMovedSprite.
 ActorUpdateSize:
   ld a,(actor+$05)        ; Actor current sprite height
   ld c,a
@@ -5073,7 +5105,7 @@ ActorUpdateSize:
 
 ; Update Actor sprite height, then mask the sprite.
 ;
-; Used by the routine at ActorEraseSprite.
+; Used by the routine at ActorEraseMovedSprite.
 L775B:
   ld (actor+$06),a        ; Update Actor sprite height
   exx
@@ -5081,13 +5113,14 @@ L775B:
 
 ; Actor/Collectible sprites start with a 3-byte header.
 ;
-; #TABLE(default,centre,:w)
-; { =h Bytes(n) | =h Meaning }
-; { 0 | Unknown Header Byte }
-; { 1 | Width (tiles) }
-; { 2 | Height (pixels)  }
-; { 3... | Pixel data  }
-; TABLE#
+; +----------+--------------------+
+; | Bytes(n) | Definition         |
+; +----------+--------------------+
+; | 0        | X position offset? |
+; | 1        | Width (tiles)      |
+; | 2        | Height (pixels)    |
+; | 3...     | Pixel data         |
+; +----------+--------------------+
 
 ; Jetman sprite for flying right #1.
 gfx_jetman_fly_right1:
@@ -5497,11 +5530,12 @@ gfx_diamond:
 
 ; Alien sprites start with a 1-byte header, and are always 16 pixels wide.
 ;
-; #TABLE(default,centre,:w)
-; { =h Bytes(n) | =h Meaning }
-; { 0 | Height (pixels)  }
-; { 1... | Pixel data  }
-; TABLE#
+; +----------+-----------------+
+; | Bytes(n) | Definition      |
+; +----------+-----------------+
+; | 0        | Height (pixels) |
+; | 1...     | Pixel data      |
+; +----------+-----------------+
 
 ; Squidgy Alien sprite #1.
 gfx_squidgy_alien1:
@@ -5591,7 +5625,7 @@ gfx_rocket_flames2:
 
 ; Unused bytes.
 L7F9D:
-  defs $16
+
 
 ; Jetpac loading screen image
 loading_screen:
@@ -6090,3 +6124,8 @@ system_font:
   defb $00,$82,$44,$28,$10,$10,$10,$00
   defb $00,$7e,$04,$08,$10,$20,$7e,$00
   defb $3c,$42,$99,$a1,$a1,$99,$42,$3c
+
+; Unused.
+L9C93:
+
+
