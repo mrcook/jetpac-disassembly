@@ -101,6 +101,6 @@ Feedback and submissions are welcome!
 
 ## Copyright Information
 
-This disassembly, comments and support files, Copyright © 2018 Michael R. Cook.
+This disassembly, comments and support files, Copyright © 2020 Michael R. Cook.
 
 JETPAC Copyright, ULTIMATE PLAY THE GAME. Copyright & Trade Name, 1983 Ashby Computers & Graphics Ltd. All rights reserved Worldwide.

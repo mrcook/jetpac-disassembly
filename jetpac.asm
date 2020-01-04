@@ -1,3 +1,10 @@
+; SkoolKit disassembly for JETPAC (cartridge)
+; (https://github.com/mrcook/jetpac-disassembly)
+;
+; Copyright (c) 2020 Michael R. Cook (this disassembly)
+; Copyright (c) 1983 Ultimate Play the Game (JETPAC)
+; JETPAC was designed and developed by Tim Stamper and Chris Stamper
+
 ; Frame counter.
 ;
 ; These lower two bytes of frame counter are incremented every 20 ms.
@@ -467,8 +474,8 @@ buffers_item_4:
 L5F98:
   defs $68
 
-; Entry address after copying data from cartridge.
-L6000:
+; PC starts here, after game load.
+EntryPoint:
   jp StartGame
 
 ; Platform GFX location and size.
@@ -577,7 +584,7 @@ RocketReset:
 PlayerTurnEnds:
   ld hl,jetman_thruster_anim_state ; HL=Jetman thruster animation object
   ld b,$0a                ; Reset all object states to be inactive
-  call L6629              ;
+  call SetObjectInactive  ;
   ld hl,rocket_module_state+$04 ; HL=Rocket module "state" field
   res 1,(hl)              ; Set to unused state
   ld hl,item_state+$04    ; HL=Collectible item "state" field
@@ -713,12 +720,12 @@ PlayerInit_0:
 ScoreLabelFlash:
   ld a,(current_player_number) ; Current player number
   and a
-  jr nz,L61BA             ; If player #2, flash 2UP text
+  jr nz,FlashScoreLabel2UP ; If player #2, flash 2UP text
   ld hl,$0018             ; else HL=1UP column position in attr file
 
 ; Set flash state for the 3-attributes of the score label.
 ;
-; Used by the routine at L61BA.
+; Used by the routine at FlashScoreLabel2UP.
 ;
 ; Input:HL screen coordinate.
 FlashText:
@@ -751,14 +758,14 @@ ScoreLabelUnflash_0:
 ; Flash 2UP score label.
 ;
 ; Used by the routine at ScoreLabelFlash.
-L61BA:
+FlashScoreLabel2UP:
   ld hl,$00d8             ; 2UP column position in attribute file
   jr FlashText
 
 ; Game initialisation for first run.
 ;
 ; Reset all scores, sets the SP, initialises the screen, and displays the main
-; menu. Used by the routine at L6000.
+; menu. Used by the routine at EntryPoint.
 StartGame:
   ld hl,hi_score          ; Reset all scores
   ld bc,$0a00             ;
@@ -965,8 +972,8 @@ ResetPlayerData_0:
 ; routine at MenuScreen.
 NewGame:
   ld hl,p1_score          ; Starting at the Player 1 score
-  ld bc,L6000             ; To BC address-1 (779 bytes) with a $00 value (C)
-  call ClearMemoryBlock
+  ld bc,$6000             ; B = counter, C = fill byte
+  call ClearMemoryBlock   ; Clear memory, with null byte
   call ResetPlayerData    ; Reset the player data
   call ResetModifiedCode  ; Reset the self-modifying code
   call LevelNew           ; Initialise a new level
@@ -1170,7 +1177,7 @@ JetFighterUpdate_6:
   ld a,(ix+$02)           ; Update Alien Y position
   add a,h                 ;
   ld (ix+$02),a           ;
-  call L7232              ; Update Actor Position X and draw
+  call UpdateAndEraseActor ; Update Actor Position X and draw
   call ColourizeSprite    ; Colourize the sprite
   ld a,(ix+$02)           ; Kill Fighter if Y position < $28
   cp $28                  ;
@@ -1224,7 +1231,7 @@ ItemCheckCollect_0:
   dec e
   jr nz,ItemDropNew       ; Drop new collectible item if E > 0
   xor a                   ; Reset A
-  call L64AE              ; HL=sprite address
+  call ItemGetSpriteAddressAttrOffset ; HL=sprite address
   call ActorDestroy       ; Destroy the collected item
   ld (ix+$00),$00         ; Set type as unused
   ld bc,$0250             ; 250 points to add to score (decimal value)
@@ -1262,14 +1269,15 @@ ItemDropGoldBar:
 ; ItemDropRandomColour.
 ItemDisplaySprite:
   xor a
-  call L64AE              ; DE=item sprite address
+  call ItemGetSpriteAddressAttrOffset ; DE=item sprite address
   call ActorUpdatePosition ; Update the item sprite
   jp ColourizeSprite      ; Colourize the sprite
 
 ; Sprite offset using colour attribute.
 ;
-; Used by the routines at ItemCheckCollect, ItemDisplaySprite and L6514.
-L64AE:
+; Used by the routines at ItemCheckCollect, ItemDisplaySprite and
+; GetCollectibleID.
+ItemGetSpriteAddressAttrOffset:
   add a,(ix+$06)
 
 ; Get address for collectible sprite.
@@ -1340,37 +1348,37 @@ CollisionDetection:
   bit 1,a                 ; Carrying rocket module/fuel if bit-1 set
   jr nz,CarryRocketItem   ;
   bit 0,a                 ; Draw sprite if bit-0 reset
-  jr z,L6514              ;
+  jr z,GetCollectibleID   ;
   call AlienCollision     ; Check for alien collision - returns E
   dec e                   ; Collect rocket module if E == 0
   jr z,CollectRocketItem  ;
   call JetmanPlatformCollision ; Platform collision - returns E
   bit 2,e                 ; Draw sprite if bit-2 set
-  jr nz,L650E             ;
+  jr nz,RedrawSprite      ;
 
-; Increment Y position and draw sprite
+; Increment Y position and draw sprite.
 ;
 ; Used by the routine at PickupRocketItem.
-L6508:
+IncYRedrawSprite:
   inc (ix+$02)
   inc (ix+$02)
 
-; Draw a sprite.
+; Redraw a sprite.
 ;
 ; Used by the routines at CollisionDetection, CollectRocketItem and
 ; CarryRocketItem.
-L650E:
-  call L7232              ; Update actor and draw sprite
+RedrawSprite:
+  call UpdateAndEraseActor ; Update actor and draw sprite
   jp ColourizeSprite      ; Colourize the sprite
 
 ; Gets collectible ID based on the current user level.
 ;
 ; Used by the routine at CollisionDetection.
-L6514:
+GetCollectibleID:
   ld a,(player_level)     ; Current player level
   rrca
   and $06                 ; There are only 6 collectibles?
-  call L64AE              ; DE=collectible item sprite address
+  call ItemGetSpriteAddressAttrOffset ; DE=collectible item sprite address
   call ActorEraseAnimSprite ; Erase an item sprite
   jp ColourizeSprite      ; Colourize the sprite
 
@@ -1390,7 +1398,7 @@ CollectRocketItem:
   ld (ix+$01),l           ; the player via the Jetman Y,X positions
   ld (ix+$02),h           ;
   call ActorUpdatePosDir  ; Update sprite X position
-  jr L650E                ; Colourize the sprite
+  jr RedrawSprite         ; Colourize the sprite
 
 ; Carry a collected rocket module/fuel pod.
 ;
@@ -1408,12 +1416,12 @@ CarryRocketItem:
   neg                     ; else make a negative value
 CarryRocketItem_0:
   cp $06                  ; Draw sprite if A >= 6
-  jr nc,L650E             ;
+  jr nc,RedrawSprite      ;
   set 2,(ix+$04)          ; Set module "state" to collected
   ld a,(rocket_state+$01) ; Rocket: X position
   ld (ix+$01),a           ; Update module X position to be same as Rocket
                           ; position
-  jr L650E                ; Update module and draw sprite
+  jr RedrawSprite         ; Update module and draw sprite
 
 ; Pick up and carry a rocket module/fuel pod.
 ;
@@ -1427,7 +1435,7 @@ PickupRocketItem:
   sla a
   add a,(ix+$02)          ; Add item Y position
   cp $b7
-  jp c,L6508              ; Increment item Y position and draw sprite if < 183
+  jp c,IncYRedrawSprite   ; Increment item Y position and draw sprite if < 183
   ld a,(rocket_module_state+$04)
   or $01
   ld (rocket_module_state+$04),a ; Set module "state" to collected
@@ -1445,7 +1453,7 @@ PickupRocketItem_0:
 PickupRocketItem_1:
   ld a,(ix+$02)           ; Item Y position of fuel pod
   cp $b0                  ; Has it reached the rocket yet?
-  jp c,L6508              ; Move the fuel cell down one pixel if not
+  jp c,IncYRedrawSprite   ; Move the fuel cell down one pixel if not
   ld a,(rocket_state+$05) ; A=rocket fuel pod count
   inc a
   ld (rocket_state+$05),a ; Increment rocket fuel pod count
@@ -1538,18 +1546,18 @@ RocketModulesReset:
   ld hl,rocket_module_state ; HL=rocket module
   ld b,$0c                ; Loop counter
 
-; Make objects inactive.
+; Set objects as inactive.
 ;
-; Used by the routine at PlayerTurnEnds.
+; Used by the routines at PlayerTurnEnds and RocketModulesReset.
 ;
 ; Input:B Loop counter: either $0A or $0C.
 ;       HL Object to be updated: fuel pod or thruster animation.
-L6629:
+SetObjectInactive:
   ld de,$0008             ; Increment value
-L6629_0:
+SetObjectInactive_0:
   ld (hl),$00             ; Reset first byte of object
-  add hl,de               ; HL += 8
-  djnz L6629_0
+  add hl,de               ; Set HL to beginning of next object
+  djnz SetObjectInactive_0
   ret
 
 ; Animate the rocket flame sprites.
@@ -1989,7 +1997,7 @@ AnimationStateReset:
 ;
 ; Input:A New direction value.
 ;       IX Animation object.
-L6868:
+EnableAnimationState:
   ld (ix+$06),a           ; Update direction
   ld (ix+$00),$08         ; Set animating to "yes"
   ld (ix+$04),$00         ; Reset frame count
@@ -2003,7 +2011,7 @@ L6868:
 ;       IX Animation object.
 AnimationStateSet:
   ld (ix+$05),$01         ; Set "state" to animating
-  jr L6868
+  jr EnableAnimationState
 
 ; Animates the explosion sprites.
 ;
@@ -2802,7 +2810,7 @@ DrawAlien:
   and $c0                 ; Temporarily change alien direction
   or $03                  ;
   ld (ix+$00),a           ;
-  call L7232              ; Update actor X position (using temp direction)
+  call UpdateAndEraseActor ; Update actor X position (using temp direction)
   call ColourizeSprite    ; Colourize the sprite
   pop af
   ld (ix+$00),a           ; Restore original direction
@@ -2879,7 +2887,7 @@ MeteorUpdate_0:
   ld a,(ix+$02)           ; Add Y speed to current Y position
   add a,(ix+$06)          ;
   ld (ix+$02),a           ;
-  call L7232              ; Update actor X position (using temp direction)
+  call UpdateAndEraseActor ; Update actor X position (using temp direction)
   call ColourizeSprite    ; Colourize the sprite
   call JetmanPlatformCollision ; Platform collision (returns E)
   bit 2,e                 ; Kill alien it collided with a platform
@@ -3170,7 +3178,7 @@ RocketBuildStateReset:
   ld a,$04                   ; Start of new level rocket state
   ld (rocket_mod_attached),a ;
   xor a                   ; Used to reset Jetman module connect status
-  jr L6F20
+  jr SetDroppedModuleState
 
 ; Old unused routines.
 L6EFA:
@@ -3206,10 +3214,13 @@ JetmanRocketStateUpdate:
   ld a,(rocket_mod_attached) ; Redundant entry point for old code at 6F31
   ld a,$01                ; Will set Jetman module connect status
 
-; Set Jetman module state.
+; Set rocket module state that Jetman was carrying.
 ;
+; Changed when Jetman successfully drops a carried module onto the Rocket pad.
 ; Used by the routine at RocketBuildStateReset.
-L6F20:
+;
+; Input:A state value.
+SetDroppedModuleState:
   ld (jetman_rocket_mod_connected),a
 
 ; Get address to sprite pixel data.
@@ -3522,7 +3533,7 @@ DisplayPlayerLives_1:
   ld de,tile_life_icon    ; Sprite for the lives icon
   push bc
   push de
-  jp L7124                ; Now display the number of lives
+  jp DrawCharPixels8Rows  ; Now display the number of lives
 ; Current player has no lives remaining, display spaces.
 DisplayPlayerLives_2:
   call DisplayPlayerLives_3 ; Display " " for no lives
@@ -3683,7 +3694,7 @@ DrawFontChar:
 ; Characters are 8 rows of pixels.
 ;
 ; Used by the routine at DisplayPlayerLives.
-L7124:
+DrawCharPixels8Rows:
   ld b,$08                ; Loop counter
 
 ; Draw the pixels for an ASCII character on screen
@@ -3848,9 +3859,9 @@ ClearAttrFile:
 ;
 ; Using Actor, adds colour to a sprite, working from bottom-to-top,
 ; left-to-right. This also handles sprites that are wrapped around the screen.
-; Used by the routines at JetFighterUpdate, ItemDisplaySprite, L650E, L6514,
-; RocketAnimateFlames, UpdateRocketColour, AnimateExplosion, DrawAlien,
-; MeteorUpdate and JetmanRedraw.
+; Used by the routines at JetFighterUpdate, ItemDisplaySprite, RedrawSprite,
+; GetCollectibleID, RocketAnimateFlames, UpdateRocketColour, AnimateExplosion,
+; DrawAlien, MeteorUpdate and JetmanRedraw.
 ;
 ; Input:IX Jetman/Alien object.
 ColourizeSprite:
@@ -3929,16 +3940,16 @@ Coord2AttrFile:
   ld h,a                  ; H=$5A <- ATTRIBUTE_FILE address (>= 5800)
   ret                     ; Return HL=5A17
 
-; Sprite finder generic jump routine.
+; Generic jump routine for finding actor pos/dir.
 ;
-; Used by the routines at L7232 and ActorFindDestroy.
-L71EC:
+; Used by the routines at UpdateAndEraseActor and ActorFindDestroy.
+JumpActorFindPosDir:
   call ActorFindPosDir    ; Find sprite using Actor
 
-; Get location of Actor
+; Get location of Actor.
 ;
 ; Used by the routines at ActorUpdatePosition and ActorDestroy.
-L71EF:
+GetActorLocation:
   ld hl,(actor)           ; HL=Actor.X/Y position
 
 ; Get sprite position and dimensions.
@@ -3964,20 +3975,19 @@ GetSpritePosition:
   ld a,(de)               ;
   ld (actor+$05),a        ; Set Actor height to header height value
 
-; Increment Sprite/Buffer address location.
+; Increment DE to beginning of next sprite header.
 ;
-; Used by the routines at GetSpritePosition and ActorUpdate to increment DE and
-; reset C.
-L7200:
+; Used by the routines at GetSpritePosition and ActorUpdate.
+NextSprite:
   ld c,$00
   inc de                  ; DE=next header value: sprite data bytes
   ret
 
-; Sprite finder from X position.
+; Find actor sprite address and update actor.
 ;
-; Used by the routines at L7232 and L727D.
-L7204:
-  call ActorMoveSprite    ; Find sprite address using X position.
+; Used by the routines at UpdateAndEraseActor and L727D.
+FindActorSpriteAndUpdate:
+  call ActorMoveSprite    ; Find actor position.
 
 ; Update actor state.
 ;
@@ -4007,14 +4017,14 @@ ActorUpdate:
   ld a,(de)               ;
   ld (actor+$06),a        ; Set Actor sprite height
   ld (actor+$03),a        ; Set Actor height to sprite height
-  jr L7200                ; Set return values (DE points to sprite pixel data)
+  jr NextSprite           ; Set return values (DE points to sprite pixel data)
 
 ; Update Actor X/Y positions.
 ;
 ; Used by the routines at ItemDisplaySprite and UpdateRocketColour.
 ActorUpdatePosition:
   push de
-  call L71EF              ; HL=Get sprite position
+  call GetActorLocation   ; HL=Get sprite position
   exx
   pop de
   call ActorUpdate        ; Update actor
@@ -4023,12 +4033,12 @@ ActorUpdatePosition:
 
 ; Now update and erase the actor.
 ;
-; Used by the routines at JetFighterUpdate, L650E, DrawAlien, MeteorUpdate and
-; JetmanRedraw.
-L7232:
-  call L7204              ; Find sprite using X position and update actor
+; Used by the routines at JetFighterUpdate, RedrawSprite, DrawAlien,
+; MeteorUpdate and JetmanRedraw.
+UpdateAndEraseActor:
+  call FindActorSpriteAndUpdate ; Find sprite using X position and update actor
   exx
-  call L71EC              ; Find sprite using actor and get address
+  call JumpActorFindPosDir ; Find sprite using actor and get address
 
 ; Erase an actor sprite - after an it's been moved.
 ;
@@ -4053,22 +4063,23 @@ ActorEraseMovedSprite_0:
   ld c,a
   ld a,(actor+$06)        ; A=actor sprite height
   cp c
-  jp c,L7747              ; Update actor size if < C
+  jp c,ActorUpdateSizeFlipReg ; Update actor size if < C
   sub c
-  jp L775B                ; Erase sprite pixels
+  jp ActorUpdateHeightAndMask ; Erase sprite pixels
 
 ; Find animation sprite position and erase its pixels.
 ;
-; Used by the routines at L6514, RocketAnimateFlames and AnimateExplosion.
+; Used by the routines at GetCollectibleID, RocketAnimateFlames and
+; AnimateExplosion.
 ActorEraseAnimSprite:
   call ActorUpdate        ; Update the Actor
-  jr L7280                ; Erase sprite pixels
+  jr EraseAnimationSprite ; Erase sprite pixels
 
 ; Find Actor position, then erase its sprite.
 ;
 ; Used by the routines at ItemCheckCollect and RocketAnimateFlames.
 ActorDestroy:
-  call L71EF              ; Get sprite position
+  call GetActorLocation   ; Get sprite position
   jr ActorEraseDestroyed  ; Erase a destroyed actor
 
 ; Find an Actor and destroy it.
@@ -4076,7 +4087,7 @@ ActorDestroy:
 ; Used by the routines at CollectRocketItem, PickupRocketItem, RocketUpdate and
 ; AnimateExplosion.
 ActorFindDestroy:
-  call L71EC              ; Find sprite and sprite position
+  call JumpActorFindPosDir ; Find sprite and sprite position
 
 ; Erase a destroyed Actor.
 ;
@@ -4092,12 +4103,12 @@ ActorEraseDestroyed:
 
 ; Unused?
 L727D:
-  call L7204
+  call FindActorSpriteAndUpdate
 
-; Erase a sprite.
+; Erase an animation sprite.
 ;
 ; Used by the routine at ActorEraseAnimSprite.
-L7280:
+EraseAnimationSprite:
   exx
   xor a
   ld (actor+$05),a        ; Actor current sprite height = $00
@@ -4106,7 +4117,7 @@ L7280:
 
 ; Find position and direction of an Actor.
 ;
-; Used by the routine at L71EC.
+; Used by the routine at JumpActorFindPosDir.
 ActorFindPosDir:
   ld a,(actor)            ; A=actor X position
   and $06
@@ -4146,7 +4157,7 @@ ActorGetSpriteAddress_0:
 ; The IX register can point to one of the actor object types:
 ; `jetman_direction`, `item_state`, or one of the 6 `alien_states`.
 ;
-; Used by the routine at L7204.
+; Used by the routine at FindActorSpriteAndUpdate.
 ;
 ; Input:IX actor object.
 ActorMoveSprite:
@@ -4397,24 +4408,24 @@ JetmanFlyIncSpdX:
   add a,$08
   add a,(ix+$05)          ; A += Jetman X speed
   cp $40
-  jr nc,L73D6             ; Jump if speed >= max
+  jr nc,JetmanFlySetMaxSpdX ; Jump if speed >= max
 
 ; Update Jetman X speed with new value.
 ;
 ; Used by the routines at JetmanDirFlipX and JetmanFlyCalcSpeedX.
-L73D1:
+JetmanFlySetSpdX:
   ld (ix+$05),a           ; Update Jetman X speed with A (will be < 64)
   jr JetmanFlyHorizontal  ; Fly horizontally
 
 ; Set Jetman X speed to the max flying speed.
 ;
 ; Used by the routine at JetmanFlyIncSpdX.
-L73D6:
+JetmanFlySetMaxSpdX:
   ld (ix+$05),$40
 
 ; Fly Jetman horizontally.
 ;
-; Used by the routines at JetmanFlyThrust, L73D1 and JetmanDirFlipX.
+; Used by the routines at JetmanFlyThrust, JetmanFlySetSpdX and JetmanDirFlipX.
 ;
 ;  Input:IX Jetman object.
 ; Output:H New X position.
@@ -4456,7 +4467,7 @@ JetmanApplyGravity_0:
   in a,($fe)              ; ...and read that row of keys
   and $1f
   cp $1f                  ; Check if any keys on the row are pressed
-  jr nz,L7438             ; Jump if so - hover Jetman
+  jr nz,JetmanSetZeroSpdY ; Jump if so - hover Jetman
   ld a,$f7                ; Read top-left row of keys
   djnz JetmanApplyGravity_0 ; ...and repeat
 
@@ -4480,19 +4491,19 @@ JetmanSpeedIncY:
   add a,$08
   add a,(ix+$06)          ; A += Jetman Y speed
   cp $3f
-  jr nc,L7448             ; Set vertical speed to max if >= 63
+  jr nc,JetmanSetMaxSpdY  ; Set vertical speed to max if >= 63
 
 ; Update Jetman vertical speed with new value.
 ;
 ; Used by the routine at JetmanDirFlipY.
-L7433:
+JetmanSetSpdY:
   ld (ix+$06),a           ; Y speed = A (is < 63)
   jr JetmanFlyVertical    ; Update vertical flying
 
 ; Set Jetman vertical speed to zero.
 ;
 ; Used by the routines at JetmanApplyGravity and JetmanFlyCheckThrusting.
-L7438:
+JetmanSetZeroSpdY:
   ld (ix+$06),$00         ; Jetman Y speed is zero
   jr JetmanFlyVertical    ; Update vertical flying
 
@@ -4502,13 +4513,13 @@ L7438:
 JetmanFlyCheckThrusting:
   call ReadInterface2Joystick ; Read Joystick
   bit 2,a                 ; Set Y speed to zero if not thrusting
-  jp z,L7438              ;
+  jp z,JetmanSetZeroSpdY  ;
   jr JetmanFlyCheckFalling ; else check if falling and update movement
 
 ; Set Jetman vertical speed to maximum.
 ;
 ; Used by the routine at JetmanSpeedIncY.
-L7448:
+JetmanSetMaxSpdY:
   ld (ix+$06),$3f         ; Set Jetman Y speed to 63
 
 ; Fly Jetman vertically.
@@ -4566,7 +4577,7 @@ JetmanCollision:
 ; Every time this function is called, a check is also made to see if the player
 ; is pressing the fire button, and draws a laser beam if so.
 JetmanRedraw:
-  call L7232              ; Update and erase the actor
+  call UpdateAndEraseActor ; Update and erase the actor
   call ColourizeSprite    ; Colour the sprite
   call ReadInputFire      ; Read the input for a FIRE button
   bit 0,a
@@ -4627,7 +4638,7 @@ JetmanDirFlipY:
   ld a,(jetman_speed_modifier) ; Jetman speed modifier ($00 or $04)
   sub $08                 ; A=$F8 or $FC
   add a,(ix+$06)          ; A += Jetman Y speed
-  jp p,L7433              ; Update vertical speed if new speed is positive
+  jp p,JetmanSetSpdY      ; Update vertical speed if new speed is positive
   ld (ix+$06),$00         ; else set Y speed to zero
   ld a,(ix+$04)           ; Flip Jetman vertical moving direction
   xor $80                 ;
@@ -4658,7 +4669,7 @@ JetmanDirFlipX:
   ld a,(jetman_speed_modifier) ; Jetman speed modifier ($00 or $04)
   sub $08                 ; A=$F8 or $FC
   add a,(ix+$05)          ; A += Jetman X speed
-  jp p,L73D1              ; Update horizontal speed if new speed is positive
+  jp p,JetmanFlySetSpdX   ; Update horizontal speed if new speed is positive
   ld (ix+$05),$00         ; else set X speed to zero
   ld a,(ix+$04)           ; Flip Jetman left/right moving direction
   xor $40                 ;
@@ -4681,9 +4692,9 @@ JetmanFlyCalcSpeedX:
   ld a,(jetman_speed_modifier) ; Jetman speed modifier ($00 or $04)
   sub $08                 ; A=$F8 or $FC
   add a,(ix+$05)          ; A += Jetman X speed
-  jp p,L73D1              ; Update horizontal speed if new speed is positive
+  jp p,JetmanFlySetSpdX   ; Update horizontal speed if new speed is positive
   xor a
-  jp L73D1                ; Update horizontal speed to zero
+  jp JetmanFlySetSpdX     ; Update horizontal speed to zero
 
 ; Jetman walking.
 ;
@@ -5010,8 +5021,8 @@ buffers_items_lookup_table:
 
 ; Erase sprite pixels when actor/sprite moves.
 ;
-; Used by the routines at ActorEraseMovedSprite, ActorEraseDestroyed, L7280 and
-; L775B.
+; Used by the routines at ActorEraseMovedSprite, ActorEraseDestroyed,
+; EraseAnimationSprite and ActorUpdateHeightAndMask.
 ;
 ;  Input:B Loop counter.
 ;        C Actor Y position, or zero?
@@ -5084,7 +5095,7 @@ MaskSprite_6:
 ; EXX then update Actor.
 ;
 ; Used by the routine at ActorEraseMovedSprite.
-L7747:
+ActorUpdateSizeFlipReg:
   exx
 
 ; Update Actor height related values.
@@ -5106,7 +5117,7 @@ ActorUpdateSize:
 ; Update Actor sprite height, then mask the sprite.
 ;
 ; Used by the routine at ActorEraseMovedSprite.
-L775B:
+ActorUpdateHeightAndMask:
   ld (actor+$06),a        ; Update Actor sprite height
   exx
   jr MaskSprite           ; Mask sprite pixels

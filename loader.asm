@@ -1,7 +1,7 @@
 ; Jetpac custom loader - requires a 48K ZX Spectrum
 ; (https://github.com/mrcook/jetpac-disassembly)
 ;
-; Copyright (c) 2018 Michael R. Cook
+; Copyright (c) 2020 Michael R. Cook
 
 ; When assembling the source code, this file should be invoked by the
 ; Pasmo Assembler for generating a working TZX tape file.

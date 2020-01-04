@@ -1,7 +1,7 @@
 > $5CCB ; SkoolKit disassembly for JETPAC (cartridge)
 > $5CCB ; (https://github.com/mrcook/jetpac-disassembly)
 > $5CCB ;
-> $5CCB ; Copyright (c) 2018 Michael R. Cook (this disassembly)
+> $5CCB ; Copyright (c) 2020 Michael R. Cook (this disassembly)
 > $5CCB ; Copyright (c) 1983 Ultimate Play the Game (JETPAC)
 > $5CCB ; JETPAC was designed and developed by Tim Stamper and Chris Stamper
 > $5CCB @start=$6000
@@ -227,7 +227,8 @@ S $5F65,51,$33 sprite 4
 @ $5F98 defs=$5F98:$68,$00
 s $5F98 Unused padding.
 S $5F98,104,$68
-c $6000 Entry address after copying data from cartridge.
+c $6000 #REGpc starts here, after game load.
+@ $6000 label=EntryPoint
 b $6003 Platform GFX location and size.
 D $6003 #TABLE(default,centre,:w) { =h Bytes(n) | =h Variable } { 1 | Colour Attribute } { 2 | X location (pixels) } { 3 | Y location (pixels) } { 4 | Width } TABLE#
 @ $6003 label=gfx_params_platforms
@@ -395,6 +396,7 @@ C $61B0,2 Loop counter for 3 characters
 C $61B2,7 Set FLASH=off on for each attribute
 c $61BA Flash 2UP score label.
 D $61BA Used by the routine at #R$6197.
+@ $61BA label=FlashScoreLabel2UP
 C $61BA,3 2UP column position in attribute file
 c $61BF Game initialisation for first run.
 D $61BF Reset all scores, sets the SP, initialises the screen, and displays the main menu. Used by the routine at #R$6000.
@@ -512,7 +514,9 @@ D $62FE Resets all player, alien, and level data, then start a new game. Used by
 @ $62FE label=NewGame
 C $62FE,3 Starting at the Player 1 score
 @ $6301 nowarn
-C $6301,3 To #REGbc address-1 (779 bytes) with a $00 value (#REGc)
+@ $6301 keep
+C $6301,3 #REGb = counter, #REGc = fill byte
+C $6304,3 Clear memory, with null byte
 C $6307,3 Reset the player data
 C $630A,3 Reset the self-modifying code
 C $630D,3 Initialise a new level
@@ -702,6 +706,7 @@ C $64A8,3 Update the item sprite
 C $64AB,3 Colourize the sprite
 c $64AE Sprite offset using colour attribute.
 D $64AE Used by the routines at #R$6461, #R$64a4 and #R$6514.
+@ $64AE label=ItemGetSpriteAddressAttrOffset
 c $64B1 Get address for collectible sprite.
 D $64B1 Used by the routine at #R$66fc.
 R $64B1 Input:A Offset for the desired sprite.
@@ -747,14 +752,17 @@ C $64FB,3 Check for alien collision - returns #REGe
 C $64FE,3 Collect rocket module if #REGe == 0
 C $6501,3 Platform collision - returns #REGe
 C $6504,4 Draw sprite if bit-2 set
-c $6508 Increment Y position and draw sprite
+c $6508 Increment Y position and draw sprite.
 D $6508 Used by the routine at #R$6565.
-c $650E Draw a sprite.
+@ $6508 label=IncYRedrawSprite
+c $650E Redraw a sprite.
 D $650E Used by the routines at #R$64e8, #R$6523 and #R$6541.
+@ $650E label=RedrawSprite
 C $650E,3 Update actor and draw sprite
 C $6511,3 Colourize the sprite
 c $6514 Gets collectible ID based on the current user level.
 D $6514 Used by the routine at #R$64e8.
+@ $6514 label=GetCollectibleID
 C $6514,3 Current player level
 C $6518,2 There are only 6 collectibles?
 C $651A,3 #REGde=collectible item sprite address
@@ -862,13 +870,14 @@ D $6624 After the rocket hits top of screen this routine resets all the collecti
 @ $6624 label=RocketModulesReset
 C $6624,3 #REGhl=rocket module
 C $6627,2 Loop counter
-c $6629 Make objects inactive.
-D $6629 Used by the routine at #R$60b7.
+c $6629 Set objects as inactive.
+D $6629 Used by the routines at #R$60b7 and #R$6624.
 R $6629 Input:B Loop counter: either $0A or $0C.
 R $6629 HL Object to be updated: fuel pod or thruster animation.
+@ $6629 label=SetObjectInactive
 C $6629,3 Increment value
 C $662C,2 Reset first byte of object
-C $662E,1 #REGhl += 8
+C $662E,1 Set #REGhl to beginning of next object
 c $6632 Animate the rocket flame sprites.
 D $6632 Used by the routines at #R$6690 and #R$66b4.
 R $6632 Input:IX Rocket object
@@ -1120,6 +1129,7 @@ c $6868 Enable animation and reset frame count.
 D $6868 Used by the routine at #R$6874.
 R $6868 Input:A New direction value.
 R $6868 IX Animation object.
+@ $6868 label=EnableAnimationState
 C $6868,3 Update direction
 C $686B,4 Set animating to "yes"
 C $686F,4 Reset frame count
@@ -1811,8 +1821,10 @@ C $6F16,3 #REGbc=sprite count
 C $6F19,2 Redundant opcode
 C $6F1B,3 Redundant entry point for old code at 6F31
 C $6F1E,2 Will set Jetman module connect status
-c $6F20 Set Jetman module state.
-D $6F20 Used by the routine at #R$6eef.
+c $6F20 Set rocket module state that Jetman was carrying.
+D $6F20 Changed when Jetman successfully drops a carried module onto the Rocket pad. Used by the routine at #R$6eef.
+R $6F20 Input:A state value.
+@ $6F20 label=SetDroppedModuleState
 c $6F23 Get address to sprite pixel data.
 D $6F23 Used by the routine at #R$6f2a.
 R $6F23 Input:HL Offset address in sprite lookup table.
@@ -2078,6 +2090,7 @@ C $7122,1 Store the character address in #REGde
 C $7123,1 Restore #REGhl
 c $7124 Characters are 8 rows of pixels.
 D $7124 Used by the routine at #R$706d.
+@ $7124 label=DrawCharPixels8Rows
 C $7124,2 Loop counter
 c $7126 Draw the pixels for an ASCII character on screen
 D $7126 Used by the routine at #R$76a6.
@@ -2226,11 +2239,13 @@ C $71E6,2 A=00000010 <- top of screen?
 C $71E8,2 A=01011010
 C $71EA,1 #REGh=$5A <- ATTRIBUTE_FILE address (>= 5800)
 C $71EB,1 Return #REGhl=5A17
-c $71EC Sprite finder generic jump routine.
+c $71EC Generic jump routine for finding actor pos/dir.
 D $71EC Used by the routines at #R$7232 and #R$726d.
+@ $71EC label=JumpActorFindPosDir
 C $71EC,3 Find sprite using Actor
-c $71EF Get location of Actor
+c $71EF Get location of Actor.
 D $71EF Used by the routines at #R$7226 and #R$7268.
+@ $71EF label=GetActorLocation
 C $71EF,3 #REGhl=Actor.X/Y position
 c $71F2 Get sprite position and dimensions.
 D $71F2 Note: the sprite header byte is added to the X position. So the question is: what is this header byte really for? Used by the routine at #R$687a.
@@ -2248,12 +2263,14 @@ C $71F6,3 #REGhl=coord to screen address (using/returning #REGhl)
 C $71F9,2 #REGb=read sprite width again
 C $71FB,2 #REGa=next header value: sprite height
 @ $71FD ssub=ld ($5dc0+$05),a ; Set Actor height to header height value
-c $7200 Increment Sprite/Buffer address location.
-D $7200 Used by the routines at #R$71f2 and #R$7207 to increment #REGde and reset #REGc.
+c $7200 Increment #REGde to beginning of next sprite header.
+D $7200 Used by the routines at #R$71f2 and #R$7207.
+@ $7200 label=NextSprite
 C $7202,1 #REGde=next header value: sprite data bytes
-c $7204 Sprite finder from X position.
+c $7204 Find actor sprite address and update actor.
 D $7204 Used by the routines at #R$7232 and #R$727d.
-C $7204,3 Find sprite address using X position.
+@ $7204 label=FindActorSpriteAndUpdate
+C $7204,3 Find actor position.
 c $7207 Update actor state.
 D $7207 Get sprite position/dimensions, and update actor. Used by the routines at #R$7226 and #R$7263.
 R $7207 Input:DE Address of header block for sprite or buffer data.
@@ -2284,6 +2301,7 @@ C $722C,3 Update actor
 C $7230,2 Erase actor sprite
 c $7232 Now update and erase the actor.
 D $7232 Used by the routines at #R$63a3, #R$650e, #R$6d43, #R$6d9c and #R$7492.
+@ $7232 label=UpdateAndEraseActor
 C $7232,3 Find sprite using X position and update actor
 C $7236,3 Find sprite using actor and get address
 c $7239 Erase an actor sprite - after an it's been moved.
@@ -2324,8 +2342,9 @@ D $7270 Used by the routines at #R$687a and #R$7268.
 @ $7276 ssub=ld ($5dc0+$03),a ; Actor "height" = $00
 C $727A,3 Mask sprite pixels
 c $727D Unused?
-c $7280 Erase a sprite.
+c $7280 Erase an animation sprite.
 D $7280 Used by the routine at #R$7263.
+@ $7280 label=EraseAnimationSprite
 @ $7282 ssub=ld ($5dc0+$05),a ; Actor current sprite height = $00
 C $7285,1 #REGc = $00
 C $7286,3 Mask sprite pixels
@@ -2500,10 +2519,12 @@ C $73CA,3 #REGa += Jetman X speed
 C $73CF,2 Jump if speed >= max
 c $73D1 Update Jetman X speed with new value.
 D $73D1 Used by the routines at #R$750c and #R$752d.
+@ $73D1 label=JetmanFlySetSpdX
 C $73D1,3 Update Jetman X speed with #REGa (will be < 64)
 C $73D4,2 Fly horizontally
 c $73D6 Set Jetman X speed to the max flying speed.
 D $73D6 Used by the routine at #R$73c3.
+@ $73D6 label=JetmanFlySetMaxSpdX
 c $73DA Fly Jetman horizontally.
 D $73DA Used by the routines at #R$739e, #R$73d1 and #R$750c.
 R $73DA Input:IX Jetman object.
@@ -2551,10 +2572,12 @@ C $742C,3 #REGa += Jetman Y speed
 C $7431,2 Set vertical speed to max if >= 63
 c $7433 Update Jetman vertical speed with new value.
 D $7433 Used by the routine at #R$74e0.
+@ $7433 label=JetmanSetSpdY
 C $7433,3 Y speed = #REGa (is < 63)
 C $7436,2 Update vertical flying
 c $7438 Set Jetman vertical speed to zero.
 D $7438 Used by the routines at #R$73f1 and #R$743e.
+@ $7438 label=JetmanSetZeroSpdY
 C $7438,4 Jetman Y speed is zero
 C $743C,2 Update vertical flying
 c $743E Check joystick input for FIRE or THRUST.
@@ -2565,6 +2588,7 @@ C $7441,5 Set Y speed to zero if not thrusting
 C $7446,2 else check if falling and update movement
 c $7448 Set Jetman vertical speed to maximum.
 D $7448 Used by the routine at #R$7425.
+@ $7448 label=JetmanSetMaxSpdY
 C $7448,4 Set Jetman Y speed to 63
 c $744C Fly Jetman vertically.
 D $744C Input:IX Jetman object.
@@ -2906,6 +2930,7 @@ C $7740,2 Loop back to top of routine
 C $7743,4 Jump if #REGc != 0
 c $7747 EXX then update Actor.
 D $7747 Used by the routine at #R$7239.
+@ $7747 label=ActorUpdateSizeFlipReg
 c $7748 Update Actor height related values.
 D $7748 Used by the routine at #R$7239.
 @ $7748 label=ActorUpdateSize
@@ -2917,6 +2942,7 @@ C $7750,1 Return if both are zero
 @ $7756 ssub=ld a,($5dc0+$06) ; Actor sprite height
 c $775B Update Actor sprite height, then mask the sprite.
 D $775B Used by the routine at #R$7239.
+@ $775B label=ActorUpdateHeightAndMask
 @ $775B ssub=ld ($5dc0+$06),a ; Update Actor sprite height
 C $775F,2 Mask sprite pixels
 > $7761 ; Actor/Collectible sprites start with a 3-byte header.
