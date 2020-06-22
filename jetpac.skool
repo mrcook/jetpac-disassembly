@@ -943,7 +943,7 @@ c$62fe ld hl,$5cf4   ; Starting at the Player 1 score
 ; Reset stack pointer and enable interrupts before running main loop.
 ;
 ; If new item/alien was generated, this routine is called instead of MainLoop.
-;
+; .
 ; Used by the routine at #R$6971.
 @label=MainLoopResetStack
 @ssub=ld sp,$5ccb+$25 ; Set the stack pointer
@@ -957,7 +957,7 @@ c$6310 ld sp,$5cf0   ;
 ;
 ; This routine is called until a new item/alien is generated, then #R$6310 is
 ; called.
-;
+; .
 ; Used by the routines at #R$6310, #R$692e and #R$6971.
 @label=MainLoop
 c$631c ld a,($5c78)  ; {Compare SYSVAR_FRAMES and last_frame
@@ -1160,7 +1160,7 @@ c$63a3 ld hl,$5dcb     ; {Increment current alien number
 ; Alien SFX when killed by collision.
 ;
 ; Reset anim state and set SFX params #2.
-;
+; .
 ; Used by the routines at #R$63a3, #R$6a35, #R$6ab8, #R$6bf8, #R$6cbe and
 ; #R$6d9c.
 @label=AlienCollisionAnimSfx
@@ -1170,6 +1170,8 @@ c$6456 call $685d    ; Update actor state
  $645e jp $683e      ; Animate explosion
 
 ; Jetman collects a collectible item.
+;
+; .
 ;
 ; Input:IX Collectible item object
 @label=ItemCheckCollect
@@ -1211,6 +1213,8 @@ w$6496 defw $64a0    ; Drop Gold bar collectible
 
 ; Drop a gold bar collectible item.
 ;
+; .
+;
 ; Input:IX Collectible item object
 @label=ItemDropGoldBar
 c$64a0 ld (ix+$03),$46 ; Set colour to GOLD
@@ -1248,12 +1252,16 @@ c$64b1 ld hl,$678c   ; Sprite lookup table
 
 ; Drop a Plutonium collectible item.
 ;
+; .
+;
 ; Input:IX Collectible item object.
 @label=ItemDropPlutonium
 c$64bc ld (ix+$03),$44 ; Set the colour to green
  $64c0 jr $64a4        ; Display item sprite
 
 ; Drop a chemical based item, flashing items radiation and plutonium.
+;
+; .
 ;
 ; Input:IX Collectible item object.
 @label=ItemDropChemical
@@ -1286,6 +1294,8 @@ c$64d7 ld a,($5dcc)  ; Game timer
  $64e6 jr $64a4      ; Display the item sprite
 
 ; Collision detection for collectible items / rocket modules.
+;
+; .
 ;
 ; Input:IX Collectible item object.
 @label=CollisionDetection
@@ -1566,6 +1576,8 @@ c$6632 ld a,(ix+$02)   ; {Add 21 to rocket Y position
 
 ; Rocket ship is taking off.
 ;
+; .
+;
 ; Input:IX Rocket object.
 @label=RocketTakeoff
 c$6690 call $72ef      ; Update Actor position direction
@@ -1585,6 +1597,8 @@ c$6690 call $72ef      ; Update Actor position direction
 
 ; Rocket ship is landing.
 ;
+; .
+;
 ; Input:IX Rocket object.
 @label=RocketLanding
 c$66b4 call $72ef      ; Update Actor position direction
@@ -1600,6 +1614,8 @@ c$66b4 call $72ef      ; Update Actor position direction
  $66ce jr $66fc        ; Update rocket colour
 
 ; Update the rocket ship.
+;
+; .
 ;
 ; Input:IX Rocket object.
 @label=RocketUpdate
@@ -1818,7 +1834,7 @@ c$67e7 ld c,$08      ; Pitch/duration
 ;
 ; The audio is triggered from the #R$6971 routine using the
 ; explosion_sfx_params data.
-;
+; .
 ; Used by the routines at #R$6456, #R$6bf1, #R$6d5c and #R$6d9c.
 ;
 ; Input:A selects SFX #1 or #2.
@@ -1853,6 +1869,8 @@ b$6810 defb $0c,$04,$0d,$04
 
 ; Play Jetman death SFX.
 ;
+; .
+;
 ; Input:IX The explosion SFX params array.
 @label=SfxJetmanDeath
 c$6814 dec (ix+$01)  ; Decrement the SFX duration
@@ -1861,6 +1879,8 @@ c$6814 dec (ix+$01)  ; Decrement the SFX duration
  $681b jr $6828      ; Play explosion SFX
 
 ; Play enemy death SFX.
+;
+; .
 ;
 ; Input:IX The explosion SFX params array.
 @label=SfxEnemyDeath
@@ -1873,7 +1893,7 @@ c$681d dec (ix+$01)  ; Decrement the SFX duration
 ; Plays the explosion sound effect.
 ;
 ; The note pitch goes from `low` to `high`.
-;
+; .
 ; Used by the routine at #R$6814.
 ;
 ; Input:C note frequency.
@@ -1891,6 +1911,8 @@ c$6828 ld a,$10      ;
  $6838 ret           ;
 
 ; Sound has finished playing.
+;
+; Used by the routines at #R$6814 and #R$681d.
 ;
 ; Input:IX The explosion SFX params array.
 @label=SfxFinishReturn
@@ -2255,6 +2277,8 @@ b$6a2d defb $03,$11,$06,$07,$0f,$05,$03,$0f
 
 ; Update Squidgy Alien.
 ;
+; .
+;
 ; Input:IX Alien object.
 @label=SquidgyAlienUpdate
 c$6a35 ld hl,$5dcb    ; {Increment current alien number
@@ -2513,6 +2537,8 @@ c$6bf1 call $685d    ; Update actor state
 
 ; Update Sphere alien.
 ;
+; .
+;
 ; Input:IX Alien object.
 @label=SphereAlienUpdate
 c$6bf8 ld hl,$5dcb    ; {Increment current alien number
@@ -2623,6 +2649,8 @@ c$6cb0 call $72ef    ; Update Actor position direction
 
 ; Update crossed space ship.
 ;
+; .
+;
 ; Input:IX Alien object.
 @label=CrossedShipUpdate
 c$6cbe call $6cb0      ; Update actor direction
@@ -2694,6 +2722,8 @@ c$6cbe call $6cb0      ; Update actor direction
 
 ; Draw an alien sprite to the screen.
 ;
+; Used by the routines at #R$6a35, #R$6ab8, #R$6bf8 and #R$6cbe.
+;
 ; Input:IX Alien object.
 @label=DrawAlien
 c$6d43 ld a,(ix+$00) ; {Backup alien direction
@@ -2757,6 +2787,8 @@ c$6d67 res 7,(ix+$04) ; Set alien to moving up
 b$6d94 defb $03,$00,$00,$42,$80,$04,$00,$1c
 
 ; Update the meteor.
+;
+; .
 ;
 ; Input:IX Alien object.
 @label=MeteorUpdate
@@ -4000,7 +4032,7 @@ c$7292 bit 6,a       ;
 ;
 ; The IX register can point to one of the actor object types:
 ; `jetman_direction`, `item_state`, or one of the 6 `alien_states`.
-;
+; .
 ; Used by the routine at #R$7204.
 ;
 ; Input:IX actor object.
@@ -4095,7 +4127,7 @@ c$72ef ld a,(ix+$01) ; {Actor X position = Jetman X position
 ; The ROM cartridge was made for the Interface 2 which reads the Joystick I
 ; bits in the format of 000LRDUF, which are mapped to the keyboard keys: 6, 7,
 ; 8, 9, and 0. Note that a reset bit means the button is pressed.
-;
+; .
 ; Used by the routines at #R$7309, #R$733f, #R$735e and #R$743e.
 ;
 ; Output:A Joystick direction/button state.
@@ -4232,6 +4264,8 @@ c$739e call $72ef     ; Update actor position direction
 
 ; Increase Jetman horizontal speed.
 ;
+; Used by the routine at #R$7501.
+;
 ; Input:IX Jetman object.
 @label=JetmanFlyIncSpdX
 c$73c3 ld a,($5dca)   ; Jetman speed modifier ($00 or $04)
@@ -4356,6 +4390,8 @@ c$7448 ld (ix+$06),$3f ; Set Jetman Y speed to 63
 
 ; Fly Jetman vertically.
 ;
+; Used by the routines at #R$7433, #R$7438 and #R$74e0.
+;
 ; Input:IX Jetman object.
 @label=JetmanFlyVertical
 c$744c ld l,(ix+$06)  ; #REGl=Jetman Y speed (will be <= 63)
@@ -4384,6 +4420,8 @@ c$7463 ld a,l        ; {Update Jetman flying counter
  $7471 jr c,$74c5    ; Check if hit top of screen
 
 ; Jetman flight collision detection.
+;
+; Used by the routines at #R$74bf and #R$74c5.
 ;
 ; Input:IX Jetman object.
 @label=JetmanCollision
@@ -4528,6 +4566,8 @@ c$752d ld a,($5dca)   ; Jetman speed modifier ($00 or $04)
  $7539 jp $73d1       ; Update horizontal speed to zero
 
 ; Jetman walking.
+;
+; .
 ;
 ; Input:IX Jetman object.
 @label=JetmanWalk
@@ -5450,7 +5490,7 @@ i$7f9d
 ; Jetpac loading screen image
 ;
 ; #UDGTABLE
-; { #SCR(0,,,,,32691,38835)(splash) | Splash screen data. }
+; { #SCR(1,,,,,32691,38835)(splash) | Splash screen data. }
 ; TABLE#
 @label=loading_screen
 b$7fb3 defb $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff

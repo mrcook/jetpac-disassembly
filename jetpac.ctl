@@ -522,14 +522,14 @@ C $630A,3 Reset the self-modifying code
 C $630D,3 Initialise a new level
 c $6310 Reset stack pointer and enable interrupts before running main loop.
 D $6310 If new item/alien was generated, this routine is called instead of MainLoop.
-R $6310 Used by the routine at #R$6971.
+D $6310 Used by the routine at #R$6971.
 @ $6310 label=MainLoopResetStack
 @ $6310 ssub=ld sp,$5ccb+$25 ; Set the stack pointer
 C $6314,4 #REGix=Rocket object
 C $6319,3 Reset current alien number
 c $631C The main game loop.
 D $631C This routine is called until a new item/alien is generated, then #R$6310 is called.
-R $631C Used by the routines at #R$6310, #R$692e and #R$6971.
+D $631C Used by the routines at #R$6310, #R$692e and #R$6971.
 @ $631C label=MainLoop
 C $631C,8 Compare SYSVAR_FRAMES and last_frame
 N $6324 Note: if we have EI here, then #R$692e will be called and DI executed.
@@ -658,14 +658,13 @@ C $6450,3 Exploding jet fighter SFX - actually Thruster SFX!
 C $6453,3 Update current alien state
 c $6456 Alien SFX when killed by collision.
 D $6456 Reset anim state and set SFX params #2.
-R $6456 Used by the routines at #R$63a3, #R$6a35, #R$6ab8, #R$6bf8, #R$6cbe and
-R $6456 #R$6d9c.
+D $6456 Used by the routines at #R$63a3, #R$6a35, #R$6ab8, #R$6bf8, #R$6cbe and #R$6d9c.
 @ $6456 label=AlienCollisionAnimSfx
 C $6456,3 Update actor state
 C $6459,5 Play explosion sound with SFX type #2
 C $645E,3 Animate explosion
 c $6461 Jetman collects a collectible item.
-D $6461 Input:IX Collectible item object
+R $6461 Input:IX Collectible item object
 @ $6461 label=ItemCheckCollect
 C $6461,3 Update Actor position direction
 C $6464,3 Platform collision - returns #REGe
@@ -695,7 +694,7 @@ W $649A,2,2 Drop chemical based collectible
 W $649C,2,2 Drop green coloured collectible
 W $649E,2,2 Drop collectible with random colour
 c $64A0 Drop a gold bar collectible item.
-D $64A0 Input:IX Collectible item object
+R $64A0 Input:IX Collectible item object
 @ $64A0 label=ItemDropGoldBar
 C $64A0,4 Set colour to GOLD
 c $64A4 Display a collectible sprite.
@@ -716,12 +715,12 @@ C $64B1,3 Sprite lookup table
 C $64B4,4 Add offset to base address
 C $64B8,3 Assign sprite address to #REGde
 c $64BC Drop a Plutonium collectible item.
-D $64BC Input:IX Collectible item object.
+R $64BC Input:IX Collectible item object.
 @ $64BC label=ItemDropPlutonium
 C $64BC,4 Set the colour to green
 C $64C0,2 Display item sprite
 c $64C2 Drop a chemical based item, flashing items radiation and plutonium.
-D $64C2 Input:IX Collectible item object.
+R $64C2 Input:IX Collectible item object.
 @ $64C2 label=ItemDropChemical
 C $64C2,3 Game timer
 C $64C9,2 Use cyan colour and display sprite
@@ -741,7 +740,7 @@ C $64E1,2 Make sure colour value is > $40
 C $64E3,3 Set the colour to between $41 and $47
 C $64E6,2 Display the item sprite
 c $64E8 Collision detection for collectible items / rocket modules.
-D $64E8 Input:IX Collectible item object.
+R $64E8 Input:IX Collectible item object.
 @ $64E8 label=CollisionDetection
 C $64E8,3 Update Actor position direction
 C $64EB,3 #REGa=item "state"
@@ -908,7 +907,7 @@ C $6681,6 Destroy flame sprite #1
 C $6687,6 Destroy flame sprite #2
 C $668D,3 Update sprite variables
 c $6690 Rocket ship is taking off.
-D $6690 Input:IX Rocket object.
+R $6690 Input:IX Rocket object.
 @ $6690 label=RocketTakeoff
 C $6690,3 Update Actor position direction
 C $6693,3 Decrement Y position
@@ -923,7 +922,7 @@ C $66AA,3 Set Rocket "move" state to down
 C $66AD,4 Reset fuel pod counter
 C $66B1,3 New level
 c $66B4 Rocket ship is landing.
-D $66B4 Input:IX Rocket object.
+R $66B4 Input:IX Rocket object.
 @ $66B4 label=RocketLanding
 C $66B4,3 Update Actor position direction
 C $66B7,3 Increment Y position
@@ -936,7 +935,7 @@ C $66C7,4 Set Rocket "move" state to default (on pad)
 C $66CB,3 Initialise the player state
 C $66CE,2 Update rocket colour
 c $66D0 Update the rocket ship.
-D $66D0 Input:IX Rocket object.
+R $66D0 Input:IX Rocket object.
 @ $66D0 label=RocketUpdate
 C $66D0,3 Update Actor position direction
 C $66D3,3 #REGe=Alien collision result: $00 or $01
@@ -1066,8 +1065,8 @@ C $67F6,1 Increment pitch
 C $67FA,2 Repeat until pitch is $38
 c $67FD Set the default explosion SFX params.
 D $67FD The audio is triggered from the #R$6971 routine using the explosion_sfx_params data.
-R $67FD Used by the routines at #R$6456, #R$6bf1, #R$6d5c and #R$6d9c.
-N $67FD Input:A selects SFX #1 or #2.
+D $67FD Used by the routines at #R$6456, #R$6bf1, #R$6d5c and #R$6d9c.
+R $67FD Input:A selects SFX #1 or #2.
 @ $67FD label=SfxSetExplodeParams
 C $67FE,2 #REGc=0 or 2
 C $6802,3 #REGde=explosion SFX params
@@ -1079,22 +1078,22 @@ D $6810 These parameters are used in pairs: SFX #1 is used for most aliens, whil
 @ $6810 label=explosion_sfx_defaults
 B $6810,4,4
 c $6814 Play Jetman death SFX.
-D $6814 Input:IX The explosion SFX params array.
+R $6814 Input:IX The explosion SFX params array.
 @ $6814 label=SfxJetmanDeath
 C $6814,3 Decrement the SFX duration
 C $6817,2 Stop playing SFX if duration is zero
 C $6819,2 Frequency = 16
 C $681B,2 Play explosion SFX
 c $681D Play enemy death SFX.
-D $681D Input:IX The explosion SFX params array.
+R $681D Input:IX The explosion SFX params array.
 @ $681D label=SfxEnemyDeath
 C $681D,3 Decrement the SFX duration
 C $6820,2 Stop playing SFX if duration is zero
 C $6827,1 Frequency = Duration + 24
 c $6828 Plays the explosion sound effect.
 D $6828 The note pitch goes from `low` to `high`.
-R $6828 Used by the routine at #R$6814.
-N $6828 Input:C note frequency.
+D $6828 Used by the routine at #R$6814.
+R $6828 Input:C note frequency.
 @ $6828 label=SfxPlayExplosion
 C $682A,2 Turn speaker ON
 C $682C,1 Set duration
@@ -1104,7 +1103,7 @@ C $6833,2 Silence for the frequency duration
 C $6835,1 Decrement frequency (higher pitch)
 C $6836,2 Repeat until frequency is zero
 c $6839 Sound has finished playing.
-D $6839 Input:IX The explosion SFX params array.
+R $6839 Input:IX The explosion SFX params array.
 @ $6839 label=SfxFinishReturn
 C $6839,4 Set frequency to zero
 c $683E Animate explosion after killing an alien.
@@ -1335,7 +1334,7 @@ b $6A2D New item object types for each level - 8 bytes for 8 levels.
 @ $6A2D label=item_level_object_types
 B $6A2D,8,8
 c $6A35 Update Squidgy Alien.
-D $6A35 Input:IX Alien object.
+R $6A35 Input:IX Alien object.
 @ $6A35 label=SquidgyAlienUpdate
 C $6A35,4 Increment current alien number
 C $6A39,3 Update actor direction
@@ -1481,7 +1480,7 @@ C $6BF1,3 Update actor state
 C $6BF4,1 #REGa should be 0 for the Alien SFX
 C $6BF5,3 Plays explosion SFX for an Alien
 c $6BF8 Update Sphere alien.
-D $6BF8 Input:IX Alien object.
+R $6BF8 Input:IX Alien object.
 @ $6BF8 label=SphereAlienUpdate
 C $6BF8,4 Increment current alien number
 C $6BFC,3 Update actor direction
@@ -1543,7 +1542,7 @@ C $6CB0,3 Update Actor position direction
 C $6CB3,3 Actor direction
 @ $6CBA ssub=ld ($5dc0+$02),a ; Update actor "direction"
 c $6CBE Update crossed space ship.
-D $6CBE Input:IX Alien object.
+R $6CBE Input:IX Alien object.
 @ $6CBE label=CrossedShipUpdate
 C $6CBE,3 Update actor direction
 C $6CC1,4 Increment alien number
@@ -1586,7 +1585,7 @@ N $6D37 Draw the alien if a new direction is set, otherwise repeat platform coll
 C $6D37,10 Draw the alien if the new direction flag is set, otherwise, increment the value
 C $6D41,2 Jump back and repeat collision check
 c $6D43 Draw an alien sprite to the screen.
-D $6D43 Input:IX Alien object.
+R $6D43 Input:IX Alien object.
 @ $6D43 label=DrawAlien
 C $6D43,4 Backup alien direction
 C $6D47,7 Temporarily change alien direction
@@ -1629,7 +1628,7 @@ D $6D94 Copied to the alien object when a new alien is instantiated.
 @ $6D94 label=default_alien_state
 B $6D94,8,8
 c $6D9C Update the meteor.
-D $6D9C Input:IX Alien object.
+R $6D9C Input:IX Alien object.
 @ $6D9C label=MeteorUpdate
 C $6D9C,3 Update Actor position direction
 C $6D9F,4 Increment alien number
@@ -2367,8 +2366,8 @@ C $72A3,3 #REGhl=start of Jetman/Buffer sprite lookup tables
 C $72A7,3 #REGde=sprite address
 c $72AB Move an actor's sprite to it's current position.
 D $72AB The IX register can point to one of the actor object types: `jetman_direction`, `item_state`, or one of the 6 `alien_states`.
-R $72AB Used by the routine at #R$7204.
-N $72AB Input:IX actor object.
+D $72AB Used by the routine at #R$7204.
+R $72AB Input:IX actor object.
 @ $72AB label=ActorMoveSprite
 C $72AB,3 #REGa=X position
 C $72B1,3 #REGa=sprite header byte
@@ -2420,8 +2419,8 @@ C $72EF,6 Actor X position = Jetman X position
 @ $72FE ssub=ld ($5dc0+$02),a ; Actor movement = Jetman direction
 c $7302 Joystick Input (Interface 2)
 D $7302 The ROM cartridge was made for the Interface 2 which reads the Joystick I bits in the format of 000LRDUF, which are mapped to the keyboard keys: 6, 7, 8, 9, and 0. Note that a reset bit means the button is pressed.
-R $7302 Used by the routines at #R$7309, #R$733f, #R$735e and #R$743e.
-N $7302 Output:A Joystick direction/button state.
+D $7302 Used by the routines at #R$7309, #R$733f, #R$735e and #R$743e.
+R $7302 Output:A Joystick direction/button state.
 @ $7302 label=ReadInterface2Joystick
 C $7302,2 Interface 2 Joystick port
 C $7306,2 #REGa = bits for 000LRDUF
@@ -2512,7 +2511,7 @@ C $73B5,3 Calculate new horizontal speed
 C $73B8,4 Set Jetman direction to be "right"
 C $73BC,7 Flip direction if currently moving left
 c $73C3 Increase Jetman horizontal speed.
-D $73C3 Input:IX Jetman object.
+R $73C3 Input:IX Jetman object.
 @ $73C3 label=JetmanFlyIncSpdX
 C $73C3,3 Jetman speed modifier ($00 or $04)
 C $73CA,3 #REGa += Jetman X speed
@@ -2591,7 +2590,7 @@ D $7448 Used by the routine at #R$7425.
 @ $7448 label=JetmanSetMaxSpdY
 C $7448,4 Set Jetman Y speed to 63
 c $744C Fly Jetman vertically.
-D $744C Input:IX Jetman object.
+R $744C Input:IX Jetman object.
 @ $744C label=JetmanFlyVertical
 C $744C,3 #REGl=Jetman Y speed (will be <= 63)
 C $7451,3 Multiply vertical X speed by 3
@@ -2607,7 +2606,7 @@ C $7467,3 Update Jetman Y position
 C $746D,2 Move up if within screen limits: 42 to 192
 C $7471,2 Check if hit top of screen
 c $7473 Jetman flight collision detection.
-D $7473 Input:IX Jetman object.
+R $7473 Input:IX Jetman object.
 @ $7473 label=JetmanCollision
 C $7473,3 Platform collision detection (returns #REGe)
 C $7476,4 Redraw Jetman if bit-2 has not been set
@@ -2702,7 +2701,7 @@ C $7532,3 #REGa += Jetman X speed
 C $7535,3 Update horizontal speed if new speed is positive
 C $7539,3 Update horizontal speed to zero
 c $753C Jetman walking.
-D $753C Input:IX Jetman object.
+R $753C Input:IX Jetman object.
 @ $753C label=JetmanWalk
 C $753C,3 Update Actor position direction
 C $753F,3 Read Left/Right input
@@ -3120,7 +3119,7 @@ b $7F7A Rocket Flame sprite #2.
 B $7F7A,35,1,2,8
 i $7F9D Unused bytes.
 b $7FB3 Jetpac loading screen image
-D $7FB3 #UDGTABLE { #SCR(0,,,,,32691,38835)(splash) | Splash screen data. } TABLE#
+D $7FB3 #UDGTABLE { #SCR(1,,,,,32691,38835)(splash) | Splash screen data. } TABLE#
 @ $7FB3 label=loading_screen
 B $7FB3,6912,16
 b $9AB3 ZX Spectrum font sprites.
