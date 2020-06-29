@@ -40,6 +40,19 @@ source into a working ZX Spectrum tape image.
     $ pasmo --tzxbas loader.asm jetpac.tzx
 
 
+### 128K Spectrum Fix
+
+If you're wanting to assemble the game for the 128K Spectrum you'll first need
+to apply this fix before converting the `skool` file to `asm`:
+
+```
+; jetpac.skool
+
+- $7326 out ($fd),a   ; Set port for reading keyboard
++ $7326 nop
++ $7327 nop
+```
+
 
 ## The Game
 
@@ -97,6 +110,96 @@ However, there are still a few sections of code and variables that would
 benefit from a deeper analysis.
 
 Feedback and submissions are welcome!
+
+
+## Cassette version disassembly
+
+This section contains some information on how the cartridge and cassette
+versions of Jetpac differ.
+
+The code in the two versions is identical except for a slight difference on
+where it's loaded in memory, and that the cassette version supports the
+Kempston joystick instead of the Interface 2.
+
+There is also a _code mover_ routine used during tape loading.
+
+Below is the skoolkit `t2s` config file, which can be used as a starting point
+for disassembling a TZX image file.
+
+```
+; tap2sna.py file for Jetpac cassette version. Run
+;
+;   $ tap2sna.py @jetpac.t2s
+;
+; to create a Z80 snapshot.
+
+jetpac.tzx
+jetpac.z80
+
+; Skoolkit handles these automatically,
+; but listing here for reference.
+; ram load:  4,16384  # load screen (JPSP)
+; ram load:  6,24576  # load game code/data
+; ram load:  8,23424  # load `mover` routine
+; ram load: 10,23728  # load `JP (HL)` opcode
+; ram load: 12,23672  # load game start check variables
+
+; After the game loads the PC starts at $6000:
+;
+; c$6000 DI
+;  $6001 JP $5B80
+;
+; The `mover` routine at $5B80 moves bytes 24580-32772 down to 24576-32768.
+; This routine is loaded from tape block #8 (see above).
+--ram move=$6004,$2000,$6000
+
+; Initialize all game variables and data so the source code is clean.
+--ram poke=$5CCB-$5FFF,$00
+
+--reg sp=$5CF0
+--reg pc=$61E5
+```
+
+As you can see, `--ram move=$6004,$2000,$6000` emulates the mover routine
+found on the tape. For those interested, that routine is as follows:
+
+```
+; Skoolkit code mover disassembly for Jetpac
+
+; Disassembly of the code mover routine, which copies 8192 bytes from address
+; $6004 down to $6000, before then jumping to the game start routine.
+c$5b80 ld hl,$6004   ;
+ $5b83 ld de,$6000   ;
+ $5b86 ld bc,$2000   ;
+ $5b89 ldir          ;
+ $5b8b jp $61e5      ;
+
+; Tape block #6 ("The Game") is loaded at this address, starts running, then
+; calls the above routine, which then overwrites these instructions.
+c$6000 di            ;
+ $6001 jp $5b80      ;
+```
+
+The Kempston joystick menu entry:
+
+```
+ $62dc defm "4   KEMPSTON JOYSTIC"
+ $62f0 defb $cb                    ; ASCII "K" ($4B) + EOL control bit
+```
+
+The joystick reading routine and how the values are used in the code do have
+some small differences. Here is the main read routine itself:
+
+```
+; Joystick Input (Kempston)
+;
+; Output:A Joystick direction/button state.
+@label=ReadKempstonJoystick
+c$733a in a,($1f)    ; Joystick port
+ $733c cpl           ; Invert all bits in #REGa
+ $733d ret           ;
+
+```
 
 
 ## Copyright Information
