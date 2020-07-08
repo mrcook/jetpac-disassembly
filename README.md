@@ -8,52 +8,6 @@ created from the raw binary data of the original ZX Spectrum JETPAC
 cartridge ROM, using the [SkoolKit](http://skoolkit.ca) disassembly toolkit.
 
 
-## Skoolkit Instructions
-
-When the ZX Spectrum boots from a cartridge the _loader_ routine located at
-address `$0000` is executed. This routine copies the loading screen to the
-Spectrum display file, and waits for the player to press a key. The game code
-and data is then copied to the computer RAM at address `$6000`
-(`24499` in decimal).
-
-So that the disassembly is placed at the correct address, Skoolkit needs to be
-given an address to start writing the bytes. The following command will extract
-the game from the `.rom` image (not included in this repository), apply the
-disassembly annotations and write the resulting source code to a `.skool` file:
-
-    $ sna2skool.py -c jetpac.ctl -Hl -o 24499 jetpac.rom > jetpac.skool
-
-
-## Assembly
-
-Skoolkit can generate valid Z80 ASM code with the following command:
-
-    $ skool2asm.py -H -crs jetpac.skool > jetpac.asm
-
-The generated `asm` won't be able to start the game without a loader routine.
-A basic example is provided in the file
-[`loader.asm`](https://github.com/mrcook/jetpac-disassembly/blob/master/loader.asm).
-
-The [Pasmo Assembler](http://pasmo.speccy.org/) can be used to assemble the
-source into a working ZX Spectrum tape image.
-
-    $ pasmo --tzxbas loader.asm jetpac.tzx
-
-
-### 128K Spectrum Fix
-
-If you're wanting to assemble the game for the 128K Spectrum you'll first need
-to apply this fix before converting the `skool` file to `asm`:
-
-```
-; jetpac.skool
-
-- $7326 out ($fd),a   ; Set port for reading keyboard
-+ $7326 nop
-+ $7327 nop
-```
-
-
 ## The Game
 
 A fast-paced shooter video game for 8-bit home computer systems.
@@ -110,6 +64,38 @@ However, there are still a few sections of code and variables that would
 benefit from a deeper analysis.
 
 Feedback and submissions are welcome!
+
+
+## Skoolkit Instructions
+
+When the ZX Spectrum boots from a cartridge the _loader_ routine located at
+address `$0000` is executed. This routine copies the loading screen to the
+Spectrum display file, and waits for the player to press a key. The game code
+and data is then copied to the computer RAM at address `$6000`
+(`24499` in decimal).
+
+So that the disassembly is placed at the correct address, Skoolkit needs to be
+given an address to start writing the bytes. The following command will extract
+the game from the `.rom` image (not included in this repository), apply the
+disassembly annotations and write the resulting source code to a `.skool` file:
+
+    $ sna2skool.py -c jetpac.ctl -Hl -o 24499 jetpac.rom > jetpac.skool
+
+
+## Assembly
+
+Skoolkit can generate valid Z80 ASM code with the following command:
+
+    $ skool2asm.py -H -crs jetpac.skool > jetpac.asm
+
+The generated `asm` won't be able to start the game without a loader routine.
+A basic example is provided in the file
+[`loader.asm`](https://github.com/mrcook/jetpac-disassembly/blob/master/loader.asm).
+
+The [Pasmo Assembler](http://pasmo.speccy.org/) can be used to assemble the
+source into a working ZX Spectrum tape image.
+
+    $ pasmo --tzxbas loader.asm jetpac.tzx
 
 
 ## Cassette version disassembly
@@ -216,6 +202,21 @@ c$733a in a,($1f)    ; Joystick port
  $733c cpl           ; Invert all bits in #REGa
  $733d ret           ;
 
+```
+
+
+### 128K Spectrum Fix
+
+In the keyboard read code there is an `out ($fd),a` instruction, which seems to
+cause issues on the 128K Spectrums and therefore will need changing to `NOP`
+instructions.
+
+```
+; jetpac.skool
+
+- $7326 out ($fd),a   ; Set port for reading keyboard
++ $7326 nop
++ $7327 nop
 ```
 
 
