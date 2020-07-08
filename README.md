@@ -114,14 +114,31 @@ Feedback and submissions are welcome!
 
 ## Cassette version disassembly
 
-This section contains some information on how the cartridge and cassette
-versions of Jetpac differ.
+This section contains some notes on how the cartridge and cassette versions of
+Jetpac differ.
 
 The code in the two versions is identical except for a slight difference on
 where it's loaded in memory, and that the cassette version supports the
-Kempston joystick instead of the Interface 2.
+Kempston joystick instead of the Interface 2. There is also a _code mover_
+routine used during tape loading.
 
-There is also a _code mover_ routine used during tape loading.
+The BASIC tape loader is one long line of instructions, which has been
+reformatted to fit here.
+
+```
+1  CLEAR 24575:
+   BEEP .1,1: BEEP .1,2: BEEP .1,3: BEEP .1,4: BEEP .1,5:
+   PAPER 0: INK 7: BRIGHT 1: CLS : PRINT BRIGHT 1;INK 7;
+   AT 9,7;"JETPAC IS LOADING";
+   AT 12,10;"PLEASE WAIT":
+   PRINT AT 0,0: LOAD ""SCREEN$ :
+   INK 0: PAPER 0:
+   PRINT AT 5,0: LOAD ""CODE :
+   PRINT AT 5,0: LOAD ""CODE :
+   PRINT AT 5,0: LOAD ""CODE :
+   PRINT AT 5,0: LOAD ""CODE :
+   PRINT USR 24576
+```
 
 Below is the skoolkit `t2s` config file, which can be used as a starting point
 for disassembling a TZX image file.
