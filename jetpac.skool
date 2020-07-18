@@ -4043,24 +4043,27 @@ c$72ab ld a,(ix+$01) ; #REGa=X position
  $72b1 ld a,(ix+$00) ; #REGa=sprite header byte
  $72b4 jr $7292      ; Get sprite address
 
-; Related to erasing and masking sprites.
+; Calculate screen address one pixel above current position.
 ;
+; Calculates the new address for writing a sprite pixel, in an upward
+; direction, taking into consideration the screen memory layout.
+; .
 ; Used by the routine at #R$7705.
 ;
 ;  Input:HL Current position.
 ; Output:HL Address for new position.
-@label=EraseSpritesHelper
-c$72b6 dec h         ;
+@label=ScreenPosOnePixelAbove
+c$72b6 dec h         ; Decrement #REGh to move up one pixel on screen
  $72b7 ld a,h        ;
  $72b8 and $07       ;
- $72ba cp $07        ;
- $72bc ret nz        ;
- $72bd ld a,l        ;
+ $72ba cp $07        ; Has a character line been crossed?
+ $72bc ret nz        ; If not, return
+ $72bd ld a,l        ; {else subtract 32 from #REGl
  $72be sub $20       ;
- $72c0 ld l,a        ;
+ $72c0 ld l,a        ; }
  $72c1 and $e0       ;
- $72c3 cp $e0        ;
- $72c5 ret z         ;
+ $72c3 cp $e0        ; Has a new section of the screen been crossed?
+ $72c5 ret z         ; Return if not
  $72c6 ld a,h        ;
  $72c7 add a,$08     ;
  $72c9 ld h,a        ;
@@ -4904,7 +4907,7 @@ c$7705 ld a,c        ; {Jump if vertical position is zero
  $771a ld l,a        ; }
 *$771b djnz $770c    ; Repeat and process for next byte
  $771d pop hl        ; Restore #REGhl to be the display file address
- $771e call $72b6    ; Calculate new position
+ $771e call $72b6    ; Calculate new pixel position
  $7721 pop bc        ;
  $7722 exx           ; NOTE: what is in C' register before this swap?
  $7723 ld a,c        ; {Jump back to the top of routine if #REGc is zero
@@ -4926,9 +4929,9 @@ c$7705 ld a,c        ; {Jump if vertical position is zero
  $7735 sub $20       ;
  $7737 ld l,a        ; }
 *$7738 djnz $772a    ; Repeat and process next byte
-; Calculate position for next byte?
+; Calculate position for next pixel location
  $773a pop hl        ;
- $773b call $72b6    ; Calculate new position
+ $773b call $72b6    ; Calculate new pixel position
  $773e pop bc        ;
 *$773f exx           ;
  $7740 jr $7705      ; Loop back to top of routine

@@ -1103,6 +1103,7 @@ C $6833,2 Silence for the frequency duration
 C $6835,1 Decrement frequency (higher pitch)
 C $6836,2 Repeat until frequency is zero
 c $6839 Sound has finished playing.
+D $6839 Used by the routines at #R$6814 and #R$681d.
 R $6839 Input:IX The explosion SFX params array.
 @ $6839 label=SfxFinishReturn
 C $6839,4 Set frequency to zero
@@ -1585,6 +1586,7 @@ N $6D37 Draw the alien if a new direction is set, otherwise repeat platform coll
 C $6D37,10 Draw the alien if the new direction flag is set, otherwise, increment the value
 C $6D41,2 Jump back and repeat collision check
 c $6D43 Draw an alien sprite to the screen.
+D $6D43 Used by the routines at #R$6a35, #R$6ab8, #R$6bf8 and #R$6cbe.
 R $6D43 Input:IX Alien object.
 @ $6D43 label=DrawAlien
 C $6D43,4 Backup alien direction
@@ -2372,11 +2374,18 @@ R $72AB Input:IX actor object.
 C $72AB,3 #REGa=X position
 C $72B1,3 #REGa=sprite header byte
 C $72B4,2 Get sprite address
-c $72B6 Related to erasing and masking sprites.
+c $72B6 Calculate screen address one pixel above current position.
+D $72B6 Calculates the new address for writing a sprite pixel, in an upward direction, taking into consideration the screen memory layout.
 D $72B6 Used by the routine at #R$7705.
 R $72B6 Input:HL Current position.
 R $72B6 Output:HL Address for new position.
-@ $72B6 label=EraseSpritesHelper
+@ $72B6 label=ScreenPosOnePixelAbove
+C $72B6,1 Decrement #REGh to move up one pixel on screen
+C $72BA,2 Has a character line been crossed?
+C $72BC,1 If not, return
+C $72BD,4 else subtract 32 from #REGl
+C $72C3,2 Has a new section of the screen been crossed?
+C $72C5,1 Return if not
 i $72CB Unused code.
 c $72D0 Convert a Y,X pixel coordinate to a DISPLAY_FILE address.
 D $72D0 Used by the routines at #R$62ca, #R$6fc5, #R$706d, #R$7134, #R$71f2, #R$7207 and #R$7638.
@@ -2511,6 +2520,7 @@ C $73B5,3 Calculate new horizontal speed
 C $73B8,4 Set Jetman direction to be "right"
 C $73BC,7 Flip direction if currently moving left
 c $73C3 Increase Jetman horizontal speed.
+D $73C3 Used by the routine at #R$7501.
 R $73C3 Input:IX Jetman object.
 @ $73C3 label=JetmanFlyIncSpdX
 C $73C3,3 Jetman speed modifier ($00 or $04)
@@ -2590,6 +2600,7 @@ D $7448 Used by the routine at #R$7425.
 @ $7448 label=JetmanSetMaxSpdY
 C $7448,4 Set Jetman Y speed to 63
 c $744C Fly Jetman vertically.
+D $744C Used by the routines at #R$7433, #R$7438 and #R$74e0.
 R $744C Input:IX Jetman object.
 @ $744C label=JetmanFlyVertical
 C $744C,3 #REGl=Jetman Y speed (will be <= 63)
@@ -2606,6 +2617,7 @@ C $7467,3 Update Jetman Y position
 C $746D,2 Move up if within screen limits: 42 to 192
 C $7471,2 Check if hit top of screen
 c $7473 Jetman flight collision detection.
+D $7473 Used by the routines at #R$74bf and #R$74c5.
 R $7473 Input:IX Jetman object.
 @ $7473 label=JetmanCollision
 C $7473,3 Platform collision detection (returns #REGe)
@@ -2913,7 +2925,7 @@ C $7711,1 Next column
 C $7715,6 If column is zero, subtract 32
 C $771B,2 Repeat and process for next byte
 C $771D,1 Restore #REGhl to be the display file address
-C $771E,3 Calculate new position
+C $771E,3 Calculate new pixel position
 C $7722,1 NOTE: what is in C' register before this swap?
 C $7723,4 Jump back to the top of routine if #REGc is zero
 C $7727,1 else decrement (vertical position?)
@@ -2923,8 +2935,8 @@ C $772D,1 Next sprite byte
 C $772F,1 #REGa=next column number
 C $7732,6 Set #REGl to beginning of line if > 0 && < 32, and repeat process for next byte
 C $7738,2 Repeat and process next byte
-N $773A Calculate position for next byte?
-C $773B,3 Calculate new position
+N $773A Calculate position for next pixel location
+C $773B,3 Calculate new pixel position
 C $7740,2 Loop back to top of routine
 C $7743,4 Jump if #REGc != 0
 c $7747 EXX then update Actor.
