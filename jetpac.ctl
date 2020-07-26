@@ -530,6 +530,7 @@ C $6319,3 Reset current alien number
 c $631C The main game loop.
 D $631C This routine is called until a new item/alien is generated, then #R$6310 is called.
 D $631C Used by the routines at #R$6310, #R$692e and #R$6971.
+R $631C Input:IX address of main jump table
 @ $631C label=MainLoop
 C $631C,8 Compare SYSVAR_FRAMES and last_frame
 N $6324 Note: if we have EI here, then #R$692e will be called and DI executed.
@@ -1229,12 +1230,12 @@ W $6928,2,2
 W $692A,2,2 Level #8: Frog Alien
 W $692C,2,2
 c $692E Frame update and disabled item drop.
-D $692E Also does the self-modifying code update.
-R $692E Output:IX Address of Jetman object
+D $692E This also performs the self-modifying code update.
 @ $692E label=FrameUpdate
 C $692E,1 This routine only called if EI, so we must now disable
 C $692F,6 Update last_frame to current SYSVAR_FRAMES
 C $6935,5 Frame has ticked over, set to true
+C $693A,2 Backup main jump table address
 N $693C Do some the code modifying...
 C $693C,3 #REGhl=points to the rocket object
 @ $693F ssub=ld ($6971+$0d),hl ; Modify `LD BC, nnnn` - rocket object
@@ -1258,7 +1259,7 @@ c $6966 Reset the modified code within the current frame.
 D $6966 Used by the routine at #R$6971, but only after that routine's code has been modified by #R$692e.
 @ $6966 label=ResetModifiedInFrame
 C $6966,3 First, reset the self-modifying code
-C $6969,2 Who does the push? Is it #R$692e ?
+C $6969,2 Restore jump table address, saved during frame update
 C $696B,4 frame ticked=false - not a new frame
 C $696F,2 Needed to tick over SYSVAR_FRAMES, main loop will disable interrupts with the frame update call
 c $6971 Generate new game actor: alien, fuel, or collectible item.

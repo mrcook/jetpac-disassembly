@@ -959,6 +959,8 @@ c$6310 ld sp,$5cf0   ;
 ; called.
 ; .
 ; Used by the routines at #R$6310, #R$692e and #R$6971.
+;
+; Input:IX address of main jump table
 @label=MainLoop
 c$631c ld a,($5c78)  ; {Compare SYSVAR_FRAMES and last_frame
  $631f ld c,a        ;
@@ -2107,16 +2109,14 @@ w$690e defw $7b69    ; Level #1: Meteor        (frame 1)
 
 ; Frame update and disabled item drop.
 ;
-; Also does the self-modifying code update.
-;
-; Output:IX Address of Jetman object
+; This also performs the self-modifying code update.
 @label=FrameUpdate
 c$692e di            ; This routine only called if EI, so we must now disable
  $692f ld a,($5c78)  ; {Update last_frame to current SYSVAR_FRAMES
  $6932 ld ($5dd4),a  ; }
  $6935 ld a,$01      ; {Frame has ticked over, set to true
  $6937 ld ($5dd5),a  ; }
- $693a push ix       ;
+ $693a push ix       ; Backup main jump table address
 ; Do some the code modifying...
  $693c ld hl,$5d30   ; #REGhl=points to the rocket object
 @ssub=ld ($6971+$0d),hl ; Modify `LD BC, nnnn` - rocket object
@@ -2153,7 +2153,7 @@ c$6954 ld hl,$5d88   ; #REGhl=inactive Jetman object
 ; modified by #R$692e.
 @label=ResetModifiedInFrame
 c$6966 call $6954    ; First, reset the self-modifying code
- $6969 pop ix        ; Who does the push? Is it #R$692e ?
+ $6969 pop ix        ; Restore jump table address, saved during frame update
  $696b xor a         ; {frame ticked=false - not a new frame
  $696c ld ($5dd5),a  ; }
  $696f ei            ; {Needed to tick over SYSVAR_FRAMES, main loop will
