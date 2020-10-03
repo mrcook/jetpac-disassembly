@@ -77,8 +77,8 @@ B $5D28,1,1 Frequency is $0C or $0D
 B $5D29,1,1 Length is always set to $04
 b $5D2A Explosion params padding, making 8 bytes total. Unused.
 S $5D2A,6,$06
-b $5D30 Rocket state object.
-D $5D30 #TABLE(default,centre,:w) { =h Bytes(n) | =h Variable } { 0 | Movement: $09=on pad, $0A=up, $0B=down } { 1 | X Position (pixels) } { 2 | Y Position (pixels) - Rocket base } { 3 | Colour Attribute } { 4 | State: can be $00 or $01 (default) } { 5 | Fuel Pods collected: 0-6 } { 6 | Unused } { 7 | Always $1C } TABLE#
+b $5D30 Rocket object attributes.
+D $5D30 #TABLE(default,centre,:w) { =h Bytes(n) | =h Variable } { 0 | Movement: $09=on pad, $0A=up, $0B=down } { 1 | X Position (pixels) } { 2 | Y Position (pixels) (base module) } { 3 | Colour Attribute } { 4 | Modules on Pad: $01 (new level default) to $03 } { 5 | Fuel Pods collected: 0-6 } { 6 | Unused } { 7 | Always $1C } TABLE#
 @ $5D30 label=rocket_state
 B $5D30,8,8
 b $5D38 Rocket module state (fuel/part).

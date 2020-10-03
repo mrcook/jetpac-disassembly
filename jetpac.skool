@@ -138,15 +138,15 @@ b$5d28 defb $00      ; Frequency is $0C or $0D
 ; Explosion params padding, making 8 bytes total. Unused.
 b$5d2a defs $06
 
-; Rocket state object.
+; Rocket object attributes.
 ;
 ; #TABLE(default,centre,:w)
 ; { =h Bytes(n) | =h Variable }
 ; { 0 | Movement: $09=on pad, $0A=up, $0B=down }
 ; { 1 | X Position (pixels) }
-; { 2 | Y Position (pixels) - Rocket base }
+; { 2 | Y Position (pixels) (base module) }
 ; { 3 | Colour Attribute }
-; { 4 | State: can be $00 or $01 (default) }
+; { 4 | Modules on Pad: $01 (new level default) to $03 }
 ; { 5 | Fuel Pods collected: 0-6 }
 ; { 6 | Unused }
 ; { 7 | Always $1C }
