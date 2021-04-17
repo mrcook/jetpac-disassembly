@@ -930,18 +930,18 @@ C $66B7,3 Increment Y position
 C $66BA,3 Thruster SFX
 C $66BD,3 Animate rocket flame sprites
 C $66C0,5 Check if rocket has landed
-C $66C5,2 Update rocket colour if not
+C $66C5,2 Update rocket colour if not (and RET)
 N $66C7 Rocket has landed!
 C $66C7,4 Set Rocket "move" state to default (on pad)
 C $66CB,3 Initialise the player state
-C $66CE,2 Update rocket colour
+C $66CE,2 Update rocket colour (and RET)
 c $66D0 Update the rocket ship.
 R $66D0 Input:IX Rocket object.
 @ $66D0 label=RocketUpdate
 C $66D0,3 Update Actor position direction
 C $66D3,3 #REGe=Alien collision result: $00 or $01
-C $66D6,3 Update rocket colour if not zero
-C $66D9,7 Update rocket colour if fuel pod counter < 6
+C $66D6,3 Update rocket colour if not zero (and RET)
+C $66D9,7 Update rocket colour if fuel pod counter < 6 (and RET)
 C $66E0,3 Set Rocket "move" state to up
 C $66E5,4 #REGix=Jetman object
 C $66E9,3 Update Jetman position direction
@@ -949,9 +949,9 @@ C $66EC,3 Jetman, find and destroy
 C $66EF,4 Reset Jetman direction
 C $66F3,2 Restore #REGix to be the rocket object
 C $66F5,4 Increment current player lives
-C $66F9,3 Display player lives
+C $66F9,3 Display player lives (and RET)
 c $66FC Update Rocket ship colour.
-D $66FC Colouring is based on the number of fuel pods collected. Used by the routines at #R$6690, #R$66b4 and #R$66d0.
+D $66FC Colouring is based on the number of fuel pods collected. This routine is never CALLed (only via JR), so the last RET forces the calling routine to return. Used by the routines at #R$6690, #R$66b4 and #R$66d0.
 R $66FC Input:IX Rocket object.
 @ $66FC label=UpdateRocketColour
 C $66FC,3 Rocket X position

@@ -1609,11 +1609,11 @@ c$66b4 call $72ef      ; Update Actor position direction
  $66bd call $6632      ; Animate rocket flame sprites
  $66c0 ld a,(ix+$02)   ; {Check if rocket has landed
  $66c3 cp $b7          ; }
- $66c5 jr c,$66fc      ; Update rocket colour if not
+ $66c5 jr c,$66fc      ; Update rocket colour if not (and RET)
 ; Rocket has landed!
  $66c7 ld (ix+$00),$09 ; Set Rocket "move" state to default (on pad)
  $66cb call $6174      ; Initialise the player state
- $66ce jr $66fc        ; Update rocket colour
+ $66ce jr $66fc        ; Update rocket colour (and RET)
 
 ; Update the rocket ship.
 ;
@@ -1623,10 +1623,10 @@ c$66b4 call $72ef      ; Update Actor position direction
 @label=RocketUpdate
 c$66d0 call $72ef      ; Update Actor position direction
  $66d3 call $6de9      ; #REGe=Alien collision result: $00 or $01
- $66d6 dec e           ; {Update rocket colour if not zero
+ $66d6 dec e           ; {Update rocket colour if not zero (and RET)
  $66d7 jr nz,$66fc     ; }
- $66d9 ld a,(ix+$05)   ; {Update rocket colour if fuel pod counter < 6
- $66dc cp $06          ;
+ $66d9 ld a,(ix+$05)   ; {Update rocket colour if fuel pod counter < 6 (and
+ $66dc cp $06          ; RET)
  $66de jr c,$66fc      ; }
  $66e0 inc (ix+$00)    ; Set Rocket "move" state to up
  $66e3 push ix         ;
@@ -1637,12 +1637,13 @@ c$66d0 call $72ef      ; Update Actor position direction
  $66f3 pop ix          ; Restore #REGix to be the rocket object
  $66f5 ld hl,$5df1     ; {Increment current player lives
  $66f8 inc (hl)        ; }
- $66f9 jp $706d        ; Display player lives
+ $66f9 jp $706d        ; Display player lives (and RET)
 
 ; Update Rocket ship colour.
 ;
-; Colouring is based on the number of fuel pods collected. Used by the routines
-; at #R$6690, #R$66b4 and #R$66d0.
+; Colouring is based on the number of fuel pods collected. This routine is
+; never CALLed (only via JR), so the last RET forces the calling routine to
+; return. Used by the routines at #R$6690, #R$66b4 and #R$66d0.
 ;
 ; Input:IX Rocket object.
 @label=UpdateRocketColour
