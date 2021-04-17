@@ -1806,16 +1806,16 @@ C $6EEF,3 #REGbc=sprite count
 C $6EF2,5 Start of new level rocket state
 C $6EF7,1 Used to reset Jetman module connect status
 i $6EFA Old unused routines.
-c $6F0B Get address to sprite pixel data, and copy to a buffer.
+c $6F0B Copy Rocket sprite pixel data to the buffer.
 D $6F0B Looks up the address for a sprite from the lookup table, then points #REGhl to the pixel data for that sprite. Used by the routine at #R$6ec2.
 R $6F0B Input:HL Offset address in sprite lookup table.
 R $6F0B DE Address of buffer to use.
 R $6F0B Output:HL Pointer to pixel data block.
-@ $6F0B label=PointerToSpritePixelDataAndCopy
+@ $6F0B label=BufferCopyRocketSpriteData
 C $6F0E,4 #REGhl=sprite address, from lookup table
 C $6F12,1 #REGhl=sprite "height"
 C $6F13,1 #REGhl=sprite data block
-C $6F14,2 Loop back up to the main copy routine
+C $6F14,2 Perform the copy
 c $6F16 Set the rocket building state on Jetman.
 D $6F16 After initialising the states, the sprites are then copied to the second pair of buffers. Used by the routine at #R$68f2.
 @ $6F16 label=JetmanRocketStateUpdate
@@ -1827,18 +1827,18 @@ c $6F20 Set rocket module state that Jetman was carrying.
 D $6F20 Changed when Jetman successfully drops a carried module onto the Rocket pad. Used by the routine at #R$6eef.
 R $6F20 Input:A state value.
 @ $6F20 label=SetDroppedModuleState
-c $6F23 Get address to sprite pixel data.
+c $6F23 Get address to sprite pixel data then copy to the buffer.
 D $6F23 Used by the routine at #R$6f2a.
 R $6F23 Input:HL Offset address in sprite lookup table.
 R $6F23 Output:HL Pointer to pixel data block.
-@ $6F23 label=PointerToSpritePixelData
+@ $6F23 label=BufferCopySprite
 C $6F26,4 #REGhl=sprite address from lookup table
 c $6F2A Copies the sprite pixel data to a buffer.
 D $6F2A Note the copious amounts of register swapping! These annotations need checking. Used by the routine at #R$6f0b.
 R $6F2A Input:C Number of bytes to copy?
 R $6F2A HL Address pointing to the "height" value in a sprite header
 R $6F2A DE Address of buffer to use.
-@ $6F2A label=BufferCopySprite
+@ $6F2A label=BufferCopySpriteData
 C $6F2B,1 Swap Sprite<->Buffer addresses
 C $6F2D,1 #REGhl=sprite address
 C $6F2E,1 #REGc (sprite count) is the important value
@@ -1864,7 +1864,7 @@ C $6F4D,1 #REGde=lookup table address
 C $6F4E,1 #REGhl=sprite, #REGde=buffer
 C $6F4F,1 #REGhl=sprite width value
 C $6F50,1 #REGhl=sprite height value
-C $6F51,3 #REGa=Rocket build state - only $02 or $04?
+C $6F51,3 #REGa=Rocket build state - only $00 or $04?
 C $6F56,1 Decrement the sprite counter
 C $6F57,2 Fetch next sprite address
 c $6F5A Create new laser beam.

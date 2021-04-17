@@ -3078,7 +3078,7 @@ c$6eef ld bc,$0002   ; #REGbc=sprite count
 ; Old unused routines.
 i$6efa
 
-; Get address to sprite pixel data, and copy to a buffer.
+; Copy Rocket sprite pixel data to the buffer.
 ;
 ; Looks up the address for a sprite from the lookup table, then points #REGhl
 ; to the pixel data for that sprite. Used by the routine at #R$6ec2.
@@ -3086,7 +3086,7 @@ i$6efa
 ;  Input:HL Offset address in sprite lookup table.
 ;        DE Address of buffer to use.
 ; Output:HL Pointer to pixel data block.
-@label=PointerToSpritePixelDataAndCopy
+@label=BufferCopyRocketSpriteData
 c$6f0b push hl       ;
  $6f0c push de       ;
  $6f0d push bc       ;
@@ -3096,7 +3096,7 @@ c$6f0b push hl       ;
  $6f11 ld l,a        ; }
  $6f12 inc hl        ; #REGhl=sprite "height"
  $6f13 inc hl        ; #REGhl=sprite data block
- $6f14 jr $6f2a      ; Loop back up to the main copy routine
+ $6f14 jr $6f2a      ; Perform the copy
 
 ; Set the rocket building state on Jetman.
 ;
@@ -3117,13 +3117,13 @@ c$6f16 ld bc,$0002   ; #REGbc=sprite count
 @label=SetDroppedModuleState
 c$6f20 ld ($5dd2),a  ;
 
-; Get address to sprite pixel data.
+; Get address to sprite pixel data then copy to the buffer.
 ;
 ; Used by the routine at #R$6f2a.
 ;
 ;  Input:HL Offset address in sprite lookup table.
 ; Output:HL Pointer to pixel data block.
-@label=PointerToSpritePixelData
+@label=BufferCopySprite
 c$6f23 push hl       ;
  $6f24 push de       ;
  $6f25 push bc       ;
@@ -3140,7 +3140,7 @@ c$6f23 push hl       ;
 ; Input:C Number of bytes to copy?
 ;       HL Address pointing to the "height" value in a sprite header
 ;       DE Address of buffer to use.
-@label=BufferCopySprite
+@label=BufferCopySpriteData
 c$6f2a push hl       ;
  $6f2b ex de,hl      ; Swap Sprite<->Buffer addresses
  $6f2c exx           ;
@@ -3171,7 +3171,7 @@ c$6f2a push hl       ;
  $6f4e ex de,hl      ; #REGhl=sprite, #REGde=buffer
  $6f4f inc hl        ; #REGhl=sprite width value
  $6f50 inc hl        ; #REGhl=sprite height value
- $6f51 ld a,($5dd3)  ; #REGa=Rocket build state - only $02 or $04?
+ $6f51 ld a,($5dd3)  ; #REGa=Rocket build state - only $00 or $04?
  $6f54 add a,b       ;
  $6f55 ld b,a        ;
  $6f56 dec c         ; Decrement the sprite counter
