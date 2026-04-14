@@ -47,19 +47,17 @@ b$5cf7 defs $03
 ; Padding to make block from hi_score to here 16 bytes in length.
 s$5cfa defs $06
 
-; Jetman direction.
+; Jetman's motion state.
 ;
-; Indicates the direction that Jetman is travelling/facing.
+; Indicates when walking or flying, and in which direction.
 ; #TABLE(default,centre,:w)
-; { =h Byte | =h Bits | =h Direction }
-; { 82 | 10000010 | WALK RIGHT }
-; { C2 | 11000010 | WALK LEFT }
-; { 01 | 00000001 | FLY UP RIGHT (default) }
-; { 41 | 01000001 | FLY UP LEFT }
-; { 81 | 10000001 | FLY DOWN RIGHT }
-; { C1 | 11000001 | FLY DOWN LEFT }
+; { =h Bits(n) | =h State }
+; { 7 | 0=fly up, 1=walk/fly down }
+; { 6 | 0=right, 1=left }
+; { 1 | 1=walking (default) }
+; { 0 | 1=flying }
 ; TABLE#
-@label=jetman_direction
+@label=jetman_motion
 b$5d00 defb $00
 
 ; Jetman X position.
@@ -80,29 +78,29 @@ b$5d02 defb $00
 @label=jetman_colour
 b$5d03 defb $00
 
-; Jetman moving direction.
+; Jetman's current state.
 ;
-; Indicates the direction in which Jetman is moving.
 ; #TABLE(default,centre,:w)
-; { =h Bits(n) | =h Direction }
-; { 6 | 0=right, 1=left }
+; { =h Bits(n) | =h State }
 ; { 7 | 0=up/standing still, 1=down }
-; { 1 | ? }
+; { 6 | 0=right, 1=left }
+; { 2 | 1=item collected }
+; { 1 | 1=carrying something }
 ; { 0 | 0=horizontal, 1=vertical }
 ; TABLE#
-@label=jetman_moving
+@label=jetman_state
 b$5d04 defb $00
 
-; Jetman Speed: Horizontal.
+; Jetman Velocity: Horizontal.
 ;
 ; Max Walking: $20. Max Flying: $40.
-@label=jetman_speed_x
+@label=jetman_velocity_x
 b$5d05 defb $00
 
-; Jetman Speed: Vertical.
+; Jetman Velocity: Vertical.
 ;
 ; Max: $3F.
-@label=jetman_speed_y
+@label=jetman_velocity_y
 b$5d06 defb $00
 
 ; Jetman sprite height, which is always $24, as set by the defaults.
@@ -300,11 +298,11 @@ b$5dc8 defb $00
 @label=alien_new_dir_flag
 b$5dc9 defb $00
 
-; Jetman speed modifier.
+; Jetman velocity modifier.
 ;
 ; Initialised to $04 by initialise game routine, otherwise value is $00 during
 ; game play.
-@label=jetman_speed_modifier
+@label=jetman_velocity_modifier
 b$5dca defb $00
 
 ; Current alien ID being updated?
@@ -462,18 +460,18 @@ s$5f98 defs $68
 @label=EntryPoint
 c$6000 jp $61bf      ;
 
-; Platform GFX location and size.
+; Platform positions and widths (in pixels).
 ;
 ; #TABLE(default,centre,:w)
 ; { =h Bytes(n) | =h Variable }
 ; { 1 | Colour Attribute }
-; { 2 | X location (pixels) }
-; { 3 | Y location (pixels) }
+; { 2 | X location }
+; { 3 | Y location }
 ; { 4 | Width }
 ; TABLE#
 @label=gfx_params_platforms
 b$6003 defb $04,$80,$60,$1b ; Middle
- $6007 defb $06,$78,$b8,$88 ; Bottom
+ $6007 defb $06,$78,$b8,$88 ; Bottom (ground)
  $600b defb $04,$30,$48,$23 ; Left
  $600f defb $04,$d0,$30,$23 ; Right
 
@@ -755,7 +753,7 @@ c$61c9 di            ; Interrupts are disabled for the core engine code
  $61ca ld sp,$5cf0   ;
  $61cd call $6064    ; Reset the screen
  $61d0 ld a,$04      ;
- $61d2 ld ($5dca),a  ; Reset Speed modifier to its default
+ $61d2 ld ($5dca),a  ; Reset velocity modifier to its default
 
 ; Show menu screen and handle menu selection.
 @label=MenuScreen
@@ -841,7 +839,7 @@ c$6234 ld de,$6261   ; Point #REGde to main menu colour attributes
  $6254 inc de        ;
  $6255 djnz $6240    ; Duel purpose loop: both colour attrs and menu items
 @keep
- $6257 ld hl,$b800   ; Note: address is past 7FFF limit of 16K ZX Spectrum
+ $6257 ld hl,$b800   ; Set Y/X coords
  $625a ld de,$6043   ; Point #REGde to the copyright string
  $625d call $7134    ; Now display the copyright message
  $6260 ret           ;
@@ -1000,7 +998,7 @@ c$6334 ld c,a        ;
 ; Addresses for all the main routines to be updated per game loop.
 @label=main_jump_table
 w$633d defw $68e4    ; Frame rate limiter
- $633f defw $737d    ; Jetman Fly
+ $633f defw $737d    ; Player Turn Starts + Jetman Fly
  $6341 defw $753c    ; Jetman Walk
  $6343 defw $6d9c    ; Meteor Update
  $6345 defw $64e8    ; Collision Detection
@@ -1295,14 +1293,14 @@ c$64d7 ld a,($5dcc)  ; Game timer
  $64e3 ld (ix+$03),a ; Set the colour to between $41 and $47
  $64e6 jr $64a4      ; Display the item sprite
 
-; Collision detection for collectible items / rocket modules.
+; Item pickup: collectibles/rocket modules.
 ;
 ; .
 ;
 ; Input:IX Collectible item object.
-@label=CollisionDetection
+@label=ItemPickup
 c$64e8 call $72ef    ; Update Actor position direction
- $64eb ld a,(ix+$04) ; #REGa=item "state"
+ $64eb ld a,(ix+$04) ; #REGa=Jetman state
  $64ee bit 2,a       ; {Pick up rocket module if bit-2 set
  $64f0 jp nz,$6565   ; }
  $64f3 bit 1,a       ; {Carrying rocket module/fuel if bit-1 set
@@ -1348,7 +1346,7 @@ c$6514 ld a,($5df0)  ; Current player level
 ;
 ; Input:IX Rocket module object.
 @label=CollectRocketItem
-c$6523 set 1,(ix+$04) ; Module "state"
+c$6523 set 1,(ix+$04) ; Set Jetman state to be carrying
  $6527 call $726d     ; Find and destroy the sprite (returns #REGde)
  $652a ld bc,$0100    ; 100 points to add to score (decimal value)
  $652d call $70c2     ; Add points to score
@@ -1376,7 +1374,7 @@ c$6541 ld hl,($5d01)  ; {Update module position so it becomes attached to the
  $6553 neg            ; else make a negative value
 *$6555 cp $06         ; {Draw sprite if #REGa >= 6
  $6557 jr nc,$650e    ; }
- $6559 set 2,(ix+$04) ; Set module "state" to collected
+ $6559 set 2,(ix+$04) ; Set Jetman state to have collected the item
 @ssub=ld a,($5d30+$01) ; Rocket: X position
  $655d ld a,($5d31)   ;
  $6560 ld (ix+$01),a  ; Update module X position to be same as Rocket position
@@ -1430,7 +1428,7 @@ c$65a8 ld a,($5d00)  ; Jetman direction
  $65ab and $3f       ;
  $65ad ret z         ; Return if not one of the 6 directions
  $65ae cp $03        ;
- $65b0 ret nc        ; Return if >= 3 (all movement except up right?)
+ $65b0 ret nc        ; Return if >= 3 (all movement except UP/RIGHT)
  $65b1 ld hl,$603b   ; #REGhl=default item state
  $65b4 ld de,$5d40   ; #REGde=collectible object
  $65b7 ld bc,$0008   ;
@@ -1482,7 +1480,7 @@ c$65f9 ld a,($5d00)  ; Jetman direction
  $65fc and $3f       ;
  $65fe ret z         ; Return if not one of the 6 directions
  $65ff cp $03        ;
- $6601 ret nc        ; Return if >= 3 (all movement except up right?)
+ $6601 ret nc        ; Return if >= 3 (all movement except UP/RIGHT)
  $6602 ld hl,$6033   ; #REGhl=default rocket module state
  $6605 ld de,$5d38   ; #REGde=rocket module object
  $6608 ld bc,$0008   ;
@@ -1538,7 +1536,7 @@ c$6632 ld a,(ix+$02)   ; {Add 21 to rocket Y position
  $663d ld a,(hl)       ; {Add 21 to actor Y position
  $663e add a,$15       ;
  $6640 ld (hl),a       ; }
- $6641 ld a,(ix+$02)   ; {If near ground, turn off flame sprites
+ $6641 ld a,(ix+$02)   ; {If on the ground, turn off flame sprites
  $6644 cp $b8          ;
  $6646 jr z,$6681      ; }
  $6648 jr nc,$666c     ; If >= 184, just update flame sprite vars
@@ -2836,7 +2834,7 @@ c$6d9c call $72ef     ; Update Actor position direction
 ; #R$6bf8, #R$6cbe and #R$6d9c.
 ;
 ;  Input:IX Alien object.
-; Output:E as either $00 or $01.
+; Output:E was alien hit: 0=no hit, 1=hit!
 @label=AlienCollision
 c$6de9 ld hl,$5d00   ; #REGhl=Jetman object
  $6dec ld e,$00      ; Default value for #REGe
@@ -4109,21 +4107,21 @@ c$72d0 ld a,l        ; Horizontal coordinate. Example, if $B8:
  $72ed ld h,a        ; #REGh=$4C <- DISPLAY_FILE address (>= 4000)
  $72ee ret           ; Return #REGhl=4C68
 
-; Copy actor position/direction values to Actor.
+; Copy an actors position data on to the temporary Actor object.
 ;
 ; Used by the routines at #R$6461, #R$64e8, #R$6523, #R$6690, #R$66b4, #R$66d0,
 ; #R$687a, #R$6cb0, #R$6d9c, #R$739e and #R$753c.
 ;
 ; Input:IX Jetman object.
-@label=ActorUpdatePosDir
+@label=TmpActorPosUpdate
 c$72ef ld a,(ix+$01) ; {Actor X position = Jetman X position
  $72f2 ld ($5dc0),a  ; }
  $72f5 ld a,(ix+$02) ;
 @ssub=ld ($5dc0+$01),a ; Actor Y position = Jetman Y position
  $72f8 ld ($5dc1),a  ;
- $72fb ld a,(ix+$00) ;
-@ssub=ld ($5dc0+$02),a ; Actor movement = Jetman direction
- $72fe ld ($5dc2),a  ;
+ $72fb ld a,(ix+$00) ; {Set Actor direction to Jetman (chase him!)
+@ssub=ld ($5dc0+$02),a ;
+ $72fe ld ($5dc2),a  ; }
  $7301 ret           ;
 
 ; Joystick Input (Interface 2)
@@ -4227,8 +4225,8 @@ c$735e ld a,($5cf3)  ; Game options
 *$737a ld a,$fd      ; #REGa=UP (thrust) : 1111 1101
  $737c ret           ;
 
-; Game play starts, or prepare new turn, or check Jetman thrust input.
-@label=GamePlayStarts
+; Player turn starts, which also checks Jetman thrust input.
+@label=PlayerTurnStarts
 c$737d ld hl,$5dd7   ; {If begin play delay timer is zero (turn started), check
  $7380 ld a,(hl)     ; to see if player is thrusting
  $7381 and a         ;
@@ -4252,44 +4250,44 @@ c$737d ld hl,$5dd7   ; {If begin play delay timer is zero (turn started), check
 ;
 ; Input:IX Jetman object.
 @label=JetmanFlyThrust
-c$739e call $72ef     ; Update actor position direction
+c$739e call $72ef     ; Update actor position direction on screen
  $73a1 call $7309     ; Read Left/Right input
- $73a4 bit 3,a        ; {Update Jetman direction for THRUST RIGHT
+ $73a4 bit 3,a        ; {Jetman thrust right, update velocity
  $73a6 jp z,$73b8     ; }
- $73a9 bit 4,a        ; {Jetman thrust left
+ $73a9 bit 4,a        ; {Jetman thrust left, update velocity
  $73ab jp z,$7501     ; }
  $73ae ld a,($5dcc)   ; Game timer
- $73b1 and $01        ; {If bit-0 is reset, fly horizontal
+ $73b1 and $01        ; {If bit-0 is reset, update horizontal velocity
  $73b3 jr z,$73da     ; }
- $73b5 jp $752d       ; Calculate new horizontal speed
+ $73b5 jp $752d       ; Calculate new horizontal velocity
 *$73b8 res 6,(ix+$00) ; Set Jetman direction to be "right"
- $73bc bit 6,(ix+$04) ; {Flip direction if currently moving left
+ $73bc bit 6,(ix+$04) ; {Flip direction, with velocity
  $73c0 jp nz,$750c    ; }
 
-; Increase Jetman horizontal speed.
+; Increase Jetman horizontal velocity.
 ;
 ; Used by the routine at #R$7501.
 ;
 ; Input:IX Jetman object.
-@label=JetmanFlyIncSpdX
-c$73c3 ld a,($5dca)   ; Jetman speed modifier ($00 or $04)
+@label=JetmanVelIncX
+c$73c3 ld a,($5dca)   ; Jetman velocity modifier ($00 or $04)
  $73c6 neg            ;
  $73c8 add a,$08      ;
- $73ca add a,(ix+$05) ; #REGa += Jetman X speed
+ $73ca add a,(ix+$05) ; #REGa += Jetman X velocity
  $73cd cp $40         ;
- $73cf jr nc,$73d6    ; Jump if speed >= max
+ $73cf jr nc,$73d6    ; Jump if velocity >= max
 
-; Update Jetman X speed with new value.
+; Update Jetman X velocity with new value.
 ;
 ; Used by the routines at #R$750c and #R$752d.
-@label=JetmanFlySetSpdX
-c$73d1 ld (ix+$05),a ; Update Jetman X speed with #REGa (will be < 64)
+@label=JetmanVelSetX
+c$73d1 ld (ix+$05),a ; Update Jetman X velocity with #REGa (will be < 64)
  $73d4 jr $73da      ; Fly horizontally
 
-; Set Jetman X speed to the max flying speed.
+; Set Jetman X velocity to the max flying speed.
 ;
 ; Used by the routine at #R$73c3.
-@label=JetmanFlySetMaxSpdX
+@label=JetmanVelSetXMax
 c$73d6 ld (ix+$05),$40 ;
 
 ; Fly Jetman horizontally.
@@ -4301,8 +4299,8 @@ c$73d6 ld (ix+$05),$40 ;
 ;        L New Thrust value.
 @label=JetmanFlyHorizontal
 c$73da ld h,$00       ;
- $73dc ld l,(ix+$05)  ; Jetman X speed (will be <= 64)
- $73df add hl,hl      ; {Multiply X speed by 3
+ $73dc ld l,(ix+$05)  ; Jetman X velocity (will be <= 64)
+ $73df add hl,hl      ; {Multiply X velocity by 3
  $73e0 add hl,hl      ;
  $73e1 add hl,hl      ; }
  $73e2 ld d,(ix+$01)  ; #REGd=Jetman X position
@@ -4341,56 +4339,56 @@ c$73f1 ld a,l        ;
  $740e ld a,$f7      ; Read top-left row of keys
  $7410 djnz $7404    ; ...and repeat
 
-; Check if Jetman is moving falling downward.
+; Check if Jetman is falling downward.
 ;
 ; Used by the routine at #R$743e.
-@label=JetmanFlyCheckFalling
+@label=JetmanFalling
 c$7412 call $735e     ; Check if THRUST button pressed (Joystick or Keys)
  $7415 bit 1,a        ; {Set Jetman to down position if not thrusting
  $7417 jp nz,$74d5    ; }
- $741a res 7,(ix+$00) ; {Jetman direction is DOWN or WALKing
+ $741a res 7,(ix+$00) ; {Set Jetman direction to RIGHT
  $741e bit 7,(ix+$04) ; }
  $7422 jp nz,$74e0    ; Flip vertical direction if moving down
 
-; Increase Jetman vertical speed.
+; Increase Jetman vertical velocity.
 ;
 ; Used by the routine at #R$74d5.
-@label=JetmanSpeedIncY
-c$7425 ld a,($5dca)   ; Jetman speed modifier ($00 or $04)
+@label=JetmanVelIncY
+c$7425 ld a,($5dca)   ; Jetman velocity modifier ($00 or $04)
  $7428 neg            ;
  $742a add a,$08      ;
- $742c add a,(ix+$06) ; #REGa += Jetman Y speed
+ $742c add a,(ix+$06) ; #REGa += Jetman Y velocity
  $742f cp $3f         ;
- $7431 jr nc,$7448    ; Set vertical speed to max if >= 63
+ $7431 jr nc,$7448    ; Set vertical velocity to max if >= 63
 
-; Update Jetman vertical speed with new value.
+; Update Jetman vertical velocity with new value.
 ;
 ; Used by the routine at #R$74e0.
-@label=JetmanSetSpdY
-c$7433 ld (ix+$06),a ; Y speed = #REGa (is < 63)
+@label=JetmanVelSetY
+c$7433 ld (ix+$06),a ; Y velocity = #REGa (is < 63)
  $7436 jr $744c      ; Update vertical flying
 
-; Set Jetman vertical speed to zero.
+; Set Jetman vertical velocity to zero.
 ;
 ; Used by the routines at #R$73f1 and #R$743e.
-@label=JetmanSetZeroSpdY
-c$7438 ld (ix+$06),$00 ; Jetman Y speed is zero
+@label=JetmanVelSetYMin
+c$7438 ld (ix+$06),$00 ; Jetman Y velocity is zero
  $743c jr $744c        ; Update vertical flying
 
 ; Check joystick input for FIRE or THRUST.
 ;
 ; Used by the routine at #R$73f1.
-@label=JetmanFlyCheckThrusting
+@label=JetmanFlyCheckThrust
 c$743e call $7302    ; Read Joystick
- $7441 bit 2,a       ; {Set Y speed to zero if not thrusting
+ $7441 bit 2,a       ; {Set Y velocity to zero if not thrusting
  $7443 jp z,$7438    ; }
  $7446 jr $7412      ; else check if falling and update movement
 
-; Set Jetman vertical speed to maximum.
+; Set Jetman vertical velocity to maximum.
 ;
 ; Used by the routine at #R$7425.
-@label=JetmanSetMaxSpdY
-c$7448 ld (ix+$06),$3f ; Set Jetman Y speed to 63
+@label=JetmanVelSetYMax
+c$7448 ld (ix+$06),$3f ; Set Jetman Y velocity to 63
 
 ; Fly Jetman vertically.
 ;
@@ -4398,22 +4396,22 @@ c$7448 ld (ix+$06),$3f ; Set Jetman Y speed to 63
 ;
 ; Input:IX Jetman object.
 @label=JetmanFlyVertical
-c$744c ld l,(ix+$06)  ; #REGl=Jetman Y speed (will be <= 63)
+c$744c ld l,(ix+$06)  ; #REGl=Jetman Y velocity (will be <= 63)
  $744f ld h,$00       ;
- $7451 add hl,hl      ; {Multiply vertical X speed by 3
+ $7451 add hl,hl      ; {Multiply velocity by 3
  $7452 add hl,hl      ;
  $7453 add hl,hl      ; }
  $7454 ld d,(ix+$02)  ; #REGd=Jetman Y position
  $7457 ld a,($5dc8)   ; {#REGe=Jetman flying counter
  $745a ld e,a         ; }
- $745b bit 7,(ix+$04) ; {Move Jetman up if moving up
+ $745b bit 7,(ix+$04) ; {Move Jetman up if state is up
  $745f jp z,$7526     ; }
  $7462 add hl,de      ; else move downwards
 
 ; Check vertical position while in mid-flight.
 ;
 ; Used by the routine at #R$7526.
-@label=JetmanFlyCheckPosY
+@label=JetmanFlyCheckY
 c$7463 ld a,l        ; {Update Jetman flying counter
  $7464 ld ($5dc8),a  ; }
  $7467 ld (ix+$02),h ; Update Jetman Y position
@@ -4421,14 +4419,14 @@ c$7463 ld a,l        ; {Update Jetman flying counter
  $746b cp $c0        ;
  $746d jr nc,$74bf   ; Move up if within screen limits: 42 to 192
  $746f cp $2a        ;
- $7471 jr c,$74c5    ; Check if hit top of screen
+ $7471 jr c,$74c5    ; Has reached top of screen
 
-; Jetman flight collision detection.
+; Jetman: check if collides with a platform.
 ;
 ; Used by the routines at #R$74bf and #R$74c5.
 ;
 ; Input:IX Jetman object.
-@label=JetmanCollision
+@label=JetmanPlatformCollision
 c$7473 call $75e8    ; Platform collision detection (returns #REGe)
  $7476 bit 2,e       ; {Redraw Jetman if bit-2 has not been set
  $7478 jr z,$7492    ; }
@@ -4474,45 +4472,45 @@ c$74a7 res 7,(ix+$04)  ; Set Jetman to be standing still
  $74ae and $c0         ; Reset FLY and WALK bits
  $74b0 or $02          ; Now set movement to WALK
  $74b2 ld (ix+$00),a   ; Update Jetman direction to be walking
- $74b5 ld (ix+$05),$00 ; Set Jetman X speed to stopped
- $74b9 ld (ix+$06),$00 ; Set Jetman Y speed to stopped
+ $74b5 ld (ix+$05),$00 ; Set Jetman X velocity to stopped
+ $74b9 ld (ix+$06),$00 ; Set Jetman Y velocity to stopped
  $74bd jr $7492        ; Redraw Jetman
 
 ; Reset Jetman movement direction.
 ;
 ; Used by the routine at #R$7463.
-@label=JetmanSetMoveUp
+@label=JetmanStateSetUp
 c$74bf res 7,(ix+$04) ; Set Jetman to be moving up
  $74c3 jr $7473       ; Jetman flight collision detection
 
-; Jetman hits the top of the screen.
+; Slow Jetman's velocity and change direction state to down.
 ;
 ; Used by the routine at #R$7463.
-@label=JetmanHitScreenTop
+@label=JetmanStateSetDownSlow
 c$74c5 set 7,(ix+$04) ; Set Jetman to be moving down
- $74c9 ld a,(ix+$06)  ; Jetman Y speed
- $74cc srl a          ;
- $74ce jr z,$7473     ; Jetman collision detection if #REGa was $00 or $01
- $74d0 ld (ix+$06),a  ; Update Jetman Y speed
- $74d3 jr $7473       ; Jetman flight collision detection
+ $74c9 ld a,(ix+$06)  ; Jetman Y velocity
+ $74cc srl a          ; Divide by 2
+ $74ce jr z,$7473     ; Check platform collision if #REGa was $00 or $01
+ $74d0 ld (ix+$06),a  ; else update Jetman Y velocity
+ $74d3 jr $7473       ; Check for platform collision
 
 ; Jetman is falling.
 ;
 ; Used by the routine at #R$7412.
-@label=JetmanSetMoveDown
+@label=JetmanStateSetDown
 c$74d5 set 7,(ix+$00) ; Set Jetman direction to WALK/DOWN
- $74d9 bit 7,(ix+$04) ; {Increment Jetman Y speed if moving down
+ $74d9 bit 7,(ix+$04) ; {Increment Jetman Y velocity if moving down
  $74dd jp nz,$7425    ; }
 
 ; Flip vertical direction Jetman is flying.
 ;
 ; Used by the routine at #R$7412.
 @label=JetmanDirFlipY
-c$74e0 ld a,($5dca)    ; Jetman speed modifier ($00 or $04)
+c$74e0 ld a,($5dca)    ; Jetman velocity modifier ($00 or $04)
  $74e3 sub $08         ; #REGa=$F8 or $FC
- $74e5 add a,(ix+$06)  ; #REGa += Jetman Y speed
- $74e8 jp p,$7433      ; Update vertical speed if new speed is positive
- $74eb ld (ix+$06),$00 ; else set Y speed to zero
+ $74e5 add a,(ix+$06)  ; #REGa += Jetman Y velocity
+ $74e8 jp p,$7433      ; Update vertical velocity if new velocity is positive
+ $74eb ld (ix+$06),$00 ; else set Y velocity to zero
  $74ef ld a,(ix+$04)   ; {Flip Jetman vertical moving direction
  $74f2 xor $80         ;
  $74f4 ld (ix+$04),a   ; }
@@ -4521,29 +4519,29 @@ c$74e0 ld a,($5dca)    ; Jetman speed modifier ($00 or $04)
 ; Decrease Jetman X position.
 ;
 ; Used by the routine at #R$73da.
-@label=JetmanFlyDecreasePosX
+@label=JetmanFlyDecX
 c$74fa and a         ; Reset Carry flag
  $74fb ex de,hl      ;
  $74fc sbc hl,de     ;
- $74fe jp $73f1      ; Update Jetman speed/dir if thrusting
+ $74fe jp $73f1      ; Update Jetman velocity/dir if thrusting
 
 ; Jetman THRUST-LEFT input.
 ;
 ; Used by the routine at #R$739e.
-@label=JetmanFlyThrustLeft
+@label=JetmanFlyLeft
 c$7501 set 6,(ix+$00) ; Set Jetman direction to be LEFT
- $7505 bit 6,(ix+$04) ; {Increase Jetman X speed if moving RIGHT
+ $7505 bit 6,(ix+$04) ; {Increase Jetman X velocity if moving RIGHT
  $7509 jp nz,$73c3    ; }
 
 ; Flip Jetman left/right flying direction.
 ;
 ; Used by the routine at #R$739e.
 @label=JetmanDirFlipX
-c$750c ld a,($5dca)    ; Jetman speed modifier ($00 or $04)
+c$750c ld a,($5dca)    ; Jetman velocity modifier ($00 or $04)
  $750f sub $08         ; #REGa=$F8 or $FC
- $7511 add a,(ix+$05)  ; #REGa += Jetman X speed
- $7514 jp p,$73d1      ; Update horizontal speed if new speed is positive
- $7517 ld (ix+$05),$00 ; else set X speed to zero
+ $7511 add a,(ix+$05)  ; #REGa += Jetman X velocity
+ $7514 jp p,$73d1      ; Update horizontal velocity if new velocity is positive
+ $7517 ld (ix+$05),$00 ; else set X velocity to zero
  $751b ld a,(ix+$04)   ; {Flip Jetman left/right moving direction
  $751e xor $40         ;
  $7520 ld (ix+$04),a   ; }
@@ -4552,22 +4550,22 @@ c$750c ld a,($5dca)    ; Jetman speed modifier ($00 or $04)
 ; Move Jetman up: decrease Y position.
 ;
 ; Used by the routine at #R$744c.
-@label=JetmanFlyMoveUp
+@label=JetmanFlyUp
 c$7526 and a         ; Reset Carry flag
  $7527 ex de,hl      ;
  $7528 sbc hl,de     ; Move upwards
  $752a jp $7463      ; Check vertical position within screen limits
 
-; Calculate new Jetman horizontal speed.
+; Calculate new Jetman horizontal velocity.
 ;
 ; Used by the routine at #R$739e.
-@label=JetmanFlyCalcSpeedX
-c$752d ld a,($5dca)   ; Jetman speed modifier ($00 or $04)
+@label=JetmanVelCalcX
+c$752d ld a,($5dca)   ; Jetman velocity modifier ($00 or $04)
  $7530 sub $08        ; #REGa=$F8 or $FC
- $7532 add a,(ix+$05) ; #REGa += Jetman X speed
- $7535 jp p,$73d1     ; Update horizontal speed if new speed is positive
+ $7532 add a,(ix+$05) ; #REGa += Jetman X velocity
+ $7535 jp p,$73d1     ; Update horizontal velocity if new velocity is positive
  $7538 xor a          ;
- $7539 jp $73d1       ; Update horizontal speed to zero
+ $7539 jp $73d1       ; Update horizontal velocity to zero
 
 ; Jetman walking.
 ;
@@ -4581,7 +4579,7 @@ c$753c call $72ef      ; Update Actor position direction
  $7544 jr z,$75ad      ; }
  $7546 bit 4,a         ; {Walk LEFT
  $7548 jp z,$75bf      ; }
- $754b ld (ix+$05),$00 ; else set Jetman X speed to zero
+ $754b ld (ix+$05),$00 ; else set Jetman X velocity to zero
 *$754f call $735e      ; Read THRUST button
  $7552 bit 1,a         ; {Walk off platform if thrusting
  $7554 jr z,$757f      ; }
@@ -4590,18 +4588,18 @@ c$753c call $72ef      ; Update Actor position direction
  $755b jr z,$757f      ; }
  $755d bit 3,e         ; {Redraw Jetman if bit-3 is reset
  $755f jp z,$7492      ; }
- $7562 ld a,(ix+$05)   ; Jetman X speed
+ $7562 ld a,(ix+$05)   ; Jetman X velocity
  $7565 and a           ;
- $7566 jp nz,$7492     ; Redraw Jetman if X speed > 0
+ $7566 jp nz,$7492     ; Redraw Jetman if X velocity > 0
  $7569 bit 6,(ix+$00)  ; {Jetman leaves a platform, either left or right based
  $756d jr z,$7575      ; on the value of bit-6. The X position is dec/inc
  $756f dec (ix+$01)    ; appropriately, and the Redraw Jetman routine is
- $7572 jp $7492        ; called. Note also that the X speed is set to max
-*$7575 inc (ix+$01)    ; walking speed, but this instruction might be
- $7578 ld (ix+$05),$20 ; irrelevant as hacking the speed value has no
+ $7572 jp $7492        ; called. Note also that the X velocity is set to max
+*$7575 inc (ix+$01)    ; walking velocity, but this instruction might be
+ $7578 ld (ix+$05),$20 ; irrelevant as hacking the velocity value has no
  $757c jp $7492        ; noticeable effect.}
 ; Jetman leaves a platform by thrusters or by walking.
-@label=JetmanWalkOffPlatform
+@label=jetmanLeavePlatform
 *$757f ld a,(ix+$00)   ; Jetman direction
  $7582 and $c0         ; Reset FLY and WALK bits
  $7584 or $01          ; Now set movement to FLY
@@ -4624,25 +4622,24 @@ c$753c call $72ef      ; Update Actor position direction
 *$75ad inc (ix+$01)    ; Jetman X position += 1
  $75b0 res 6,(ix+$00)  ; Jetman direction is right
  $75b4 res 6,(ix+$04)  ; Jetman moving direction to right
- $75b8 ld (ix+$05),$20 ; Set Jetman X speed to maximum
+ $75b8 ld (ix+$05),$20 ; Set Jetman X velocity to maximum
  $75bc jp $754f        ; Loop back, checking again for THRUST input
 ; Jetman walks left.
 *$75bf dec (ix+$01)    ; Jetman X position -= 1
  $75c2 set 6,(ix+$00)  ; Jetman direction is left
  $75c6 set 6,(ix+$04)  ; Jetman moving direction to left
- $75ca ld (ix+$05),$20 ; Set Jetman X speed to maximum
+ $75ca ld (ix+$05),$20 ; Set Jetman X velocity to maximum
  $75ce jp $754f        ; Loop back, checking again for THRUST input
 
-; Related to horizontal platform collision detection - possibly flipping
-; between sprite X position collision and Jetman direction collision...needs
-; more work!
+; Related to vertical platform collision detection...needs more work!
 ;
 ; Used by the routine at #R$75ed.
 ;
 ; Input:A Sprite X position minus Platform X position?
-;       IX Jetman or alien.
+;       IX Jetman or alien object
+@label=PlatformCollisionVertical
 c$75d1 ex af,af'     ;
- $75d2 ld a,(ix+$00) ; Jetman/alien direction
+ $75d2 ld a,(ix+$00) ; actor direction
  $75d5 and $3f       ; Value must be <= 63
  $75d7 cp $03        ; {Jump if value == 3 (therefore never when Jetman)
  $75d9 jr z,$75de    ; }
@@ -4654,7 +4651,7 @@ c$75d1 ex af,af'     ;
  $75e4 add a,$09     ; if #REGa is negative
  $75e6 jr $75fc      ; }
 
-; Jetman/platform collision detection.
+; Iterate over all platforms and check for a collision.
 ;
 ; NOTE: collision detection is location based not pixel/colour based, so even
 ; if platform tiles are not drawn, a collision will be detected! Used by the
@@ -4663,36 +4660,45 @@ c$75d1 ex af,af'     ;
 ;
 ;  Input:IX Jetman or Alien object.
 ; Output:E Collision state.
-@label=JetmanPlatformCollision
-c$75e8 ld b,$04      ; Loop counter (4 platforms to check)
+@label=PlatformCollisionCheckAll
+c$75e8 ld b,$04      ; Loop counter (4 platform to check)
  $75ea ld hl,$6003   ; Platform location/size params
 
-; Horizontal platform collision detection for Jetman/Alien.
+; Check if an actor collides with a platform.
 ;
 ; Used by the routine at #R$75fc.
 ;
 ; Input:HL Address of platform object.
 ;       IX Jetman or Alien object.
-@label=JetmanPlatformCollisionX
+@label=platformCollisionForActor
 c$75ed ld e,$00      ;
  $75ef push hl       ;
  $75f0 inc hl        ; {#REGa=Platform X position
  $75f1 ld a,(hl)     ; }
  $75f2 sub (ix+$01)  ; Subtract Jetman/Alien X position
- $75f5 jp p,$75d1    ; If positive, Horizontal collision detection
+ $75f5 jp p,$75d1    ; If > 0 do XY collision detection
  $75f8 neg           ;
  $75fa set 6,e       ; Set bit-6 and then vertical collision detection
 
-; Vertical platform collision detection for Jetman/Aliens.
+; Platform collision checks.
 ;
-; Used by the routine at #R$75d1.
+; #REGe states:
+; #TABLE(default,centre,:w)
+; { =h Bits(n) | =h State }
+; { 7 | Top hit }
+; { 6 | No hit ??? }
+; { 4 | Bottom hit }
+; { 3 | Redraw Jetman }
+; { 2 | Alien hit }
+; { 1 | Jetman walks off platform }
+; TABLE#
 ;
 ;  Input:A Sprite X position.
 ;        E Collision state on entry.
 ;        HL Address of platform object.
 ;        IX Jetman/Alien object.
-; Output:E Collision state. Bit: 7=landed, 4=hits head, 3=?, 2=?.
-@label=JetmanPlatformCollisionY
+; Output:E Collision state.
+@label=PlatformCollision
 c$75fc inc hl        ; Platform Y location
  $75fd inc hl        ; Platform width
  $75fe cp (hl)       ; {X position >= width (no collision) so try next platform
